@@ -1,6 +1,8 @@
-# OUC MyUsage — Home Assistant Integration
+# MyUsage HA — Home Assistant Integration
 
-Pull electric, water, and reclaimed water usage from OUC's MyUsage portal directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
+Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
+
+Works with any utility using Exceleron's MyUsage platform — Orlando Utilities Commission (OUC), Tampa Electric, and many others.
 
 > **Proper HACS integration** — Install one click, enter credentials in UI, no SSH or manual setup required.
 
@@ -12,7 +14,7 @@ Pull electric, water, and reclaimed water usage from OUC's MyUsage portal direct
 ✅ **Hourly updates** — checks for new readings every hour (OUC posts ~9–10 AM)  
 ✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages  
 ✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard  
-✅ **Zero config** — auto-detects your meters, works for any OUC account  
+✅ **Zero config** — auto-detects your meters, works for any supported utility  
 ✅ **stdlib only** — no `pip install` required, works on HAOS  
 
 ---
@@ -20,11 +22,11 @@ Pull electric, water, and reclaimed water usage from OUC's MyUsage portal direct
 ## Installation via HACS
 
 1. Go to **Settings → Devices & Services → Integrations**
-2. Click **+ Create Automation** → search for **OUC MyUsage**
+2. Click **+ Create Automation** → search for **MyUsage HA**
 3. Click **Install**
 4. Restart Home Assistant
-5. Go to **Integrations**, search **OUC MyUsage**, click **Create Entry**
-6. Enter your OUC email and password
+5. Go to **Integrations**, search **MyUsage HA**, click **Create Entry**
+6. Enter your utility email and password
 7. Sensors appear in 1–2 minutes
 
 ---
@@ -33,13 +35,13 @@ Pull electric, water, and reclaimed water usage from OUC's MyUsage portal direct
 
 | Sensor | Value | Unit |
 |--------|-------|------|
-| `sensor.ouc_myusage_electric` | Last daily kWh | kWh |
-| `sensor.ouc_myusage_electric_peak_demand` | Peak kW | kW |
-| `sensor.ouc_myusage_water` | Last daily water usage | gal |
-| `sensor.ouc_myusage_reclaimed_water` | Last daily reclaimed usage | gal |
-| `sensor.ouc_myusage_electric_month_to_date` | Month total (kWh) | kWh |
-| `sensor.ouc_myusage_water_month_to_date` | Month total (gal) | gal |
-| `sensor.ouc_myusage_reclaimed_month_to_date` | Month total (gal) | gal |
+| `sensor.myusage_ha_electric` | Last daily kWh | kWh |
+| `sensor.myusage_ha_electric_peak_demand` | Peak kW | kW |
+| `sensor.myusage_ha_water` | Last daily water usage | gal |
+| `sensor.myusage_ha_reclaimed_water` | Last daily reclaimed usage | gal |
+| `sensor.myusage_ha_electric_month_to_date` | Month total (kWh) | kWh |
+| `sensor.myusage_ha_water_month_to_date` | Month total (gal) | gal |
+| `sensor.myusage_ha_reclaimed_month_to_date` | Month total (gal) | gal |
 
 All sensors have meter numbers, reading types, and timestamps in their attributes.
 
@@ -54,15 +56,15 @@ cards:
   - type: statistics-graph
     title: "⚡ Electric (30 days)"
     entities:
-      - sensor.ouc_myusage_electric
+      - sensor.myusage_ha_electric
     period: day
     stat_types:
       - mean
   - type: statistics-graph
     title: "💧 Water (30 days)"
     entities:
-      - sensor.ouc_myusage_water
-      - sensor.ouc_myusage_reclaimed_water
+      - sensor.myusage_ha_water
+      - sensor.myusage_ha_reclaimed_water
     period: day
     stat_types:
       - mean
@@ -89,7 +91,7 @@ The key difference from command-line approach:
 
 ## Notes
 
-- OUC posts readings ~9–10 AM; sensors update hourly but values only change when OUC posts
+- Your utility posts readings ~9–10 AM; sensors update hourly but values only change when readings are posted
 - Uses Python stdlib only — works on any HAOS installation
 - Stats are external (not entity recorder) — stored with statistic_id `ouc_myusage:electric_kwh` etc.
 - Safe to run multiple times; statistics only update if values changed
@@ -101,7 +103,7 @@ The key difference from command-line approach:
 
 **Sensors showing "unavailable":**
 - Integration may still be fetching on first run (1–2 min)
-- Check Settings → Devices & Services → Integrations for "OUC MyUsage" errors
+- Check Settings → Devices & Services → Integrations for "MyUsage HA" errors
 - Verify email/password are correct
 
 **Charts show old data:**
@@ -109,8 +111,8 @@ The key difference from command-line approach:
 - Restart HA if charts still blank after waiting
 
 **Login errors:**
-- Double-check OUC email and password (case-sensitive)
-- If you changed your OUC password, re-enter it in the integration settings
+- Double-check your utility email and password (case-sensitive)
+- If you changed your password, re-enter it in the integration settings
 
 ---
 

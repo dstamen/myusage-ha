@@ -1,6 +1,6 @@
-"""Constants for OUC MyUsage integration."""
+"""Constants for MyUsage HA integration."""
 
-DOMAIN = "ouc_myusage"
+DOMAIN = "myusage_ha"
 SCAN_INTERVAL_HOURS = 1
 
 BASE_URL    = "https://www.myusage.com"

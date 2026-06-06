@@ -1,6 +1,6 @@
 {
-  "domain": "ouc_myusage",
-  "name": "OUC MyUsage",
+  "domain": "myusage_ha",
+  "name": "MyUsage HA",
   "version": "1.0.0",
   "config_flow": true,
   "documentation": "https://github.com/dstamen/ouc-ha-integration",

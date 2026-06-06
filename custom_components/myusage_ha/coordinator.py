@@ -316,9 +316,9 @@ class OUCCoordinator(DataUpdateCoordinator):
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc).timestamp()
 
         datasets = [
-            ("ouc_myusage:electric_kwh", "OUC Electric",        "kWh", data["electric"]["history"], "kwh"),
-            ("ouc_myusage:water_gal",    "OUC Water",           "gal", data["water"]["history"],    "gal"),
-            ("ouc_myusage:reclaimed_gal","OUC Reclaimed Water", "gal", data["reclaimed"]["history"],"gal"),
+            ("myusage_ha:electric_kwh", "Electric",        "kWh", data["electric"]["history"], "kwh"),
+            ("myusage_ha:water_gal",    "Water",           "gal", data["water"]["history"],    "gal"),
+            ("myusage_ha:reclaimed_gal","Reclaimed Water", "gal", data["reclaimed"]["history"],"gal"),
         ]
 
         now_ts = datetime.now(timezone.utc).timestamp()

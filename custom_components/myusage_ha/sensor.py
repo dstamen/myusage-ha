@@ -30,7 +30,7 @@ class OUCSensorDescription(SensorEntityDescription):
 SENSORS: tuple[OUCSensorDescription, ...] = (
     OUCSensorDescription(
         key="electric_kwh",
-        name="OUC Electric",
+        name="Electric",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         icon="mdi:lightning-bolt",
@@ -46,7 +46,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="electric_kw",
-        name="OUC Electric Peak Demand",
+        name="Electric Peak Demand",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         icon="mdi:flash",
@@ -55,7 +55,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="water_gal",
-        name="OUC Water",
+        name="Water",
         native_unit_of_measurement=UNIT_GAL,
         device_class=SensorDeviceClass.WATER,
         icon="mdi:water",
@@ -69,7 +69,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="reclaimed_gal",
-        name="OUC Reclaimed Water",
+        name="Reclaimed Water",
         native_unit_of_measurement=UNIT_GAL,
         device_class=SensorDeviceClass.WATER,
         icon="mdi:water-recycle",
@@ -83,7 +83,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="electric_mtd",
-        name="OUC Electric Month-to-Date",
+        name="Electric Month-to-Date",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         icon="mdi:lightning-bolt-circle",
@@ -92,7 +92,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="water_mtd",
-        name="OUC Water Month-to-Date",
+        name="Water Month-to-Date",
         native_unit_of_measurement=UNIT_GAL,
         device_class=SensorDeviceClass.WATER,
         icon="mdi:water-circle",
@@ -101,7 +101,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
     ),
     OUCSensorDescription(
         key="reclaimed_mtd",
-        name="OUC Reclaimed Month-to-Date",
+        name="Reclaimed Month-to-Date",
         native_unit_of_measurement=UNIT_GAL,
         device_class=SensorDeviceClass.WATER,
         icon="mdi:water-recycle",
@@ -140,8 +140,8 @@ class OUCSensor(CoordinatorEntity[OUCCoordinator], SensorEntity):
         self._attr_unique_id    = f"{entry.entry_id}_{description.key}"
         self._attr_device_info  = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name":        "OUC MyUsage",
-            "manufacturer":"Orlando Utilities Commission",
+            "name":        "MyUsage",
+            "manufacturer":"Exceleron",
             "model":       "MyUsage Portal",
             "entry_type":  "service",
         }
