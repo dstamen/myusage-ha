@@ -1,4 +1,4 @@
-# MyUsage — Home Assistant Integration
+# MyUsage
 
 Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
 
@@ -10,8 +10,8 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 ## Features
 
-✅ **7 sensors** — electric (kWh + kW demand), water, reclaimed water, and MTD totals for each  
-✅ **Hourly updates** — checks for new readings every hour (OUC posts ~9–10 AM)  
+✅ **4 sensors** — electric (kWh + kW demand), water, reclaimed water  
+✅ **Hourly updates** — checks for new readings every hour  
 ✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages  
 ✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard  
 ✅ **Zero config** — auto-detects your meters, works for any supported utility  
@@ -109,7 +109,7 @@ The key difference from command-line approach:
 
 - Your utility posts readings ~9–10 AM; sensors update hourly but values only change when readings are posted
 - Uses Python stdlib only — works on any HAOS installation
-- Stats are external (not entity recorder) — stored with statistic_id `ouc_myusage:electric_kwh` etc.
+- Stats are external (not entity recorder) — stored with statistic_id `myusage:electric_kwh` etc.
 - Safe to run multiple times; statistics only update if values changed
 - Works for any utility using Exceleron's MyUsage platform
 
