@@ -90,7 +90,7 @@ cards:
 
 ## How It Works
 
-1. **Hourly fetch** — coordinator logs into OUC's MyUsage portal via HTTPS
+1. **Hourly fetch** — coordinator logs into your utility's MyUsage portal via HTTPS
 2. **Parse history** — extracts last 30 days of electric & water readings from portal
 3. **Create sensors** — displays latest reading + peak demand + MTD totals
 4. **Daily backfill** — automatically injects daily readings into HA's statistics database
