@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1976D2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="96" cy="96" r="90" fill="url(#grad)"/>
+
+  <!-- Water drop -->
+  <path d="M 70 60 Q 70 45 80 45 Q 90 45 90 60 Q 90 75 80 90 Q 70 75 70 60 Z" fill="white" opacity="0.9"/>
+
+  <!-- Lightning bolt -->
+  <path d="M 110 45 L 100 70 L 115 70 L 100 95 L 125 55 L 110 55 Z" fill="white" opacity="0.9"/>
+
+  <!-- Meter circle outline -->
+  <circle cx="96" cy="96" r="85" fill="none" stroke="white" stroke-width="3" opacity="0.3"/>
+
+  <!-- Bottom text indicator -->
+  <text x="96" y="145" font-family="Arial, sans-serif" font-size="14" fill="white" text-anchor="middle" opacity="0.8">MyUsage</text>
+</svg>
