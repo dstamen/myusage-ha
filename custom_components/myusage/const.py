@@ -1,6 +1,6 @@
-"""Constants for MyUsage HA integration."""
+"""Constants for MyUsage integration."""
 
-DOMAIN = "myusage_ha"
+DOMAIN = "myusage"
 SCAN_INTERVAL_HOURS = 1
 
 BASE_URL    = "https://www.myusage.com"

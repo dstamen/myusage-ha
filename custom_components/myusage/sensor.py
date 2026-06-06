@@ -81,33 +81,6 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
             "meter":   d["meters"]["reclaimed"],
         },
     ),
-    OUCSensorDescription(
-        key="electric_mtd",
-        name="Electric Month-to-Date",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        icon="mdi:lightning-bolt-circle",
-        value_fn=lambda d: d["electric"]["mtd_kwh"],
-        attr_fn=None,
-    ),
-    OUCSensorDescription(
-        key="water_mtd",
-        name="Water Month-to-Date",
-        native_unit_of_measurement=UNIT_GAL,
-        device_class=SensorDeviceClass.WATER,
-        icon="mdi:water-circle",
-        value_fn=lambda d: d["water"]["mtd_gal"],
-        attr_fn=None,
-    ),
-    OUCSensorDescription(
-        key="reclaimed_mtd",
-        name="Reclaimed Month-to-Date",
-        native_unit_of_measurement=UNIT_GAL,
-        device_class=SensorDeviceClass.WATER,
-        icon="mdi:water-recycle",
-        value_fn=lambda d: d["reclaimed"]["mtd_gal"],
-        attr_fn=None,
-    ),
 )
 
 

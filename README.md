@@ -1,4 +1,4 @@
-# MyUsage HA — Home Assistant Integration
+# MyUsage — Home Assistant Integration
 
 Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
 
@@ -22,10 +22,10 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 ## Installation via HACS
 
 1. Go to **Settings → Devices & Services → Integrations**
-2. Click **+ Create Automation** → search for **MyUsage HA**
+2. Click **+ Create Automation** → search for **MyUsage**
 3. Click **Install**
 4. Restart Home Assistant
-5. Go to **Integrations**, search **MyUsage HA**, click **Create Entry**
+5. Go to **Integrations**, search **MyUsage**, click **Create Entry**
 6. Enter your utility email and password
 7. Sensors appear in 1–2 minutes
 
@@ -35,15 +35,31 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 | Sensor | Value | Unit |
 |--------|-------|------|
-| `sensor.myusage_ha_electric` | Last daily kWh | kWh |
-| `sensor.myusage_ha_electric_peak_demand` | Peak kW | kW |
-| `sensor.myusage_ha_water` | Last daily water usage | gal |
-| `sensor.myusage_ha_reclaimed_water` | Last daily reclaimed usage | gal |
-| `sensor.myusage_ha_electric_month_to_date` | Month total (kWh) | kWh |
-| `sensor.myusage_ha_water_month_to_date` | Month total (gal) | gal |
-| `sensor.myusage_ha_reclaimed_month_to_date` | Month total (gal) | gal |
+| `sensor.myusage_electric` | Last daily kWh | kWh |
+| `sensor.myusage_electric_peak_demand` | Peak kW | kW |
+| `sensor.myusage_water` | Last daily water usage | gal |
+| `sensor.myusage_reclaimed_water` | Last daily reclaimed usage | gal |
 
-All sensors have meter numbers, reading types, and timestamps in their attributes.
+All sensors include meter numbers, reading types, and posted timestamps in their attributes. The `history` attribute contains the last 30 days of readings (used for month-to-date calculations).
+
+**Optional: Month-to-Date Totals**
+
+Add template sensors to calculate MTD totals from history:
+
+```yaml
+template:
+  - sensor:
+      - name: "Electric MTD"
+        unique_id: myusage_electric_mtd
+        unit_of_measurement: "kWh"
+        state: >
+          {% set hist = state_attr('sensor.myusage_electric', 'electric')['history'] %}
+          {% set m = now().month %}{% set y = now().year %}
+          {% set ns = namespace(t=0) %}
+          {% for h in hist %}{% set p = h.d.split('/') %}
+            {% if p[0]|int == m and p[2]|int == y %}{% set ns.t = ns.t + h.kwh %}{% endif %}
+          {% endfor %}{{ ns.t }}
+```
 
 ---
 
@@ -56,15 +72,15 @@ cards:
   - type: statistics-graph
     title: "⚡ Electric (30 days)"
     entities:
-      - sensor.myusage_ha_electric
+      - sensor.myusage_electric
     period: day
     stat_types:
       - mean
   - type: statistics-graph
     title: "💧 Water (30 days)"
     entities:
-      - sensor.myusage_ha_water
-      - sensor.myusage_ha_reclaimed_water
+      - sensor.myusage_water
+      - sensor.myusage_reclaimed_water
     period: day
     stat_types:
       - mean
@@ -103,7 +119,7 @@ The key difference from command-line approach:
 
 **Sensors showing "unavailable":**
 - Integration may still be fetching on first run (1–2 min)
-- Check Settings → Devices & Services → Integrations for "MyUsage HA" errors
+- Check Settings → Devices & Services → Integrations for "MyUsage" errors
 - Verify email/password are correct
 
 **Charts show old data:**
