@@ -98,25 +98,22 @@ SENSORS: tuple[MyUsageSensorDescription, ...] = (
     MyUsageSensorDescription(
         key="electric_last_posted",
         name="Electric Last Posted",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock-outline",
-        value_fn=lambda d: _parse_posted(d["electric"]["posted"]),
+        value_fn=lambda d: d["electric"]["posted"],
         attr_fn=None,
     ),
     MyUsageSensorDescription(
         key="water_last_posted",
         name="Water Last Posted",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock-outline",
-        value_fn=lambda d: _parse_posted(d["water"]["posted"]),
+        value_fn=lambda d: d["water"]["posted"],
         attr_fn=None,
     ),
     MyUsageSensorDescription(
         key="reclaimed_last_posted",
         name="Reclaimed Water Last Posted",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock-outline",
-        value_fn=lambda d: _parse_posted(d["reclaimed"]["posted"]),
+        value_fn=lambda d: d["reclaimed"]["posted"],
         attr_fn=None,
     ),
 )
