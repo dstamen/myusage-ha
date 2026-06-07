@@ -1,12 +1,12 @@
 {
-  "domain": "myusage",
-  "name": "MyUsage",
-  "version": "0.1.1-beta",
-  "config_flow": true,
-  "documentation": "https://github.com/dstamen/myusage-ha",
-  "issue_tracker": "https://github.com/dstamen/myusage-ha/issues",
-  "requirements": [],
-  "dependencies": ["recorder"],
   "codeowners": ["@dstamen"],
-  "iot_class": "cloud_polling"
+  "config_flow": true,
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/dstamen/myusage-ha",
+  "domain": "myusage",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/dstamen/myusage-ha/issues",
+  "name": "MyUsage",
+  "requirements": [],
+  "version": "0.1.1-beta"
 }
