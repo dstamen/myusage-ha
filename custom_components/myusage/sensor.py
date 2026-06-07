@@ -72,7 +72,7 @@ SENSORS: tuple[MyUsageSensorDescription, ...] = (
         name="Reclaimed Water",
         native_unit_of_measurement=UNIT_GAL,
         device_class=SensorDeviceClass.WATER,
-        icon="mdi:water-recycle",
+        icon="mdi:recycle",
         value_fn=lambda d: d["reclaimed"]["last_gal"],
         attr_fn=lambda d: {
             "posted":  d["reclaimed"]["posted"],
