@@ -1,4 +1,4 @@
-"""Sensor platform for OUC MyUsage integration."""
+"""Sensor platform for MyUsage integration."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,19 +16,19 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import OUCCoordinator
+from .coordinator import MyUsageCoordinator
 
 UNIT_GAL = "gal"
 
 
 @dataclass(frozen=True, kw_only=True)
-class OUCSensorDescription(SensorEntityDescription):
+class MyUsageSensorDescription(SensorEntityDescription):
     value_fn: callable = None
     attr_fn:  callable = None
 
 
-SENSORS: tuple[OUCSensorDescription, ...] = (
-    OUCSensorDescription(
+SENSORS: tuple[MyUsageSensorDescription, ...] = (
+    MyUsageSensorDescription(
         key="electric_kwh",
         name="Electric",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -44,7 +44,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
             "meter":    d["meters"]["electric"],
         },
     ),
-    OUCSensorDescription(
+    MyUsageSensorDescription(
         key="electric_kw",
         name="Electric Peak Demand",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
@@ -53,7 +53,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
         value_fn=lambda d: d["electric"]["last_kw"],
         attr_fn=None,
     ),
-    OUCSensorDescription(
+    MyUsageSensorDescription(
         key="water_gal",
         name="Water",
         native_unit_of_measurement=UNIT_GAL,
@@ -67,7 +67,7 @@ SENSORS: tuple[OUCSensorDescription, ...] = (
             "meter":   d["meters"]["water"],
         },
     ),
-    OUCSensorDescription(
+    MyUsageSensorDescription(
         key="reclaimed_gal",
         name="Reclaimed Water",
         native_unit_of_measurement=UNIT_GAL,
@@ -89,23 +89,23 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: OUCCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: MyUsageCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        OUCSensor(coordinator, description, entry)
+        MyUsageSensor(coordinator, description, entry)
         for description in SENSORS
     )
 
 
-class OUCSensor(CoordinatorEntity[OUCCoordinator], SensorEntity):
+class MyUsageSensor(CoordinatorEntity[MyUsageCoordinator], SensorEntity):
     """A single OUC usage sensor."""
 
-    entity_description: OUCSensorDescription
+    entity_description: MyUsageSensorDescription
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        coordinator: OUCCoordinator,
-        description: OUCSensorDescription,
+        coordinator: MyUsageCoordinator,
+        description: MyUsageSensorDescription,
         entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator)

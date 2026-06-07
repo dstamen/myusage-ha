@@ -1,20 +1,20 @@
-"""OUC MyUsage integration for Home Assistant."""
+"""MyUsage integration for Home Assistant."""
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, CONF_EMAIL, CONF_PASSWORD
-from .coordinator import OUCCoordinator
+from .coordinator import MyUsageCoordinator
 
 PLATFORMS: list[str] = ["sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up OUC MyUsage from a config entry."""
+    """Set up MyUsage from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    coordinator = OUCCoordinator(
+    coordinator = MyUsageCoordinator(
         hass,
         entry.data[CONF_EMAIL],
         entry.data[CONF_PASSWORD],

@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for OUC MyUsage — fetches usage from myusage.com."""
+"""DataUpdateCoordinator for MyUsage — fetches usage from myusage.com."""
 from __future__ import annotations
 
 import logging
@@ -136,8 +136,8 @@ def _post(opener, url: str, data_dict: dict, extra_headers: dict | None = None) 
         return r.read().decode("utf-8", errors="replace"), r.geturl()
 
 
-def _fetch_ouc_data(email: str, password: str) -> dict:
-    """Fetch 30-day usage history from OUC MyUsage (blocking — run in executor)."""
+def _fetch_myusage_data(email: str, password: str) -> dict:
+    """Fetch 30-day usage history from MyUsage (blocking — run in executor)."""
     today = datetime.now()
     from_date = (today - timedelta(days=30)).strftime("%m/%d/%Y")
     to_date   = (today + timedelta(days=1)).strftime("%m/%d/%Y")
@@ -278,8 +278,8 @@ def _fetch_ouc_data(email: str, password: str) -> dict:
 
 # ── Coordinator ───────────────────────────────────────────────────────────────
 
-class OUCCoordinator(DataUpdateCoordinator):
-    """Fetches OUC data and injects daily statistics."""
+class MyUsageCoordinator(DataUpdateCoordinator):
+    """Fetches MyUsage data and injects daily statistics."""
 
     def __init__(self, hass: HomeAssistant, email: str, password: str) -> None:
         super().__init__(
@@ -299,7 +299,7 @@ class OUCCoordinator(DataUpdateCoordinator):
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
-            raise UpdateFailed(f"Error fetching OUC data: {exc}") from exc
+            raise UpdateFailed(f"Error fetching MyUsage data: {exc}") from exc
 
         # Inject statistics after fetching
         await self.hass.async_add_executor_job(self._inject_statistics, data)
@@ -371,6 +371,6 @@ class OUCCoordinator(DataUpdateCoordinator):
 
             conn.commit()
             conn.close()
-            _LOGGER.debug("OUC statistics updated successfully")
+            _LOGGER.debug("MyUsage statistics updated successfully")
         except Exception as exc:
-            _LOGGER.error("Failed to update OUC statistics: %s", exc)
+            _LOGGER.error("Failed to update MyUsage statistics: %s", exc)
