@@ -1,7 +1,7 @@
 # MyUsage
 
 [![Version](https://img.shields.io/github/v/release/dstamen/myusage-ha?label=version)](https://github.com/dstamen/myusage-ha/releases/latest)
-[![Validate for HACS](https://github.com/dstamen/myusage-ha/workflows/Validate%20with%20hassfest%20and%20HACS/badge.svg)](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml)
+[![Validate with hassfest and HACS](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml)
 
 Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
 
