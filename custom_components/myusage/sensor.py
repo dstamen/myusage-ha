@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfPower
@@ -19,6 +20,19 @@ from .const import DOMAIN
 from .coordinator import MyUsageCoordinator
 
 UNIT_GAL = "gal"
+
+
+def _parse_posted(posted: str):
+    """Parse posted date string (MM/DD/YYYY HH:MM AM/PM) to UTC datetime."""
+    if not posted:
+        return None
+    try:
+        return datetime.strptime(posted, "%m/%d/%Y %I:%M %p").replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            return datetime.strptime(posted.split(" ")[0], "%m/%d/%Y").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -80,6 +94,30 @@ SENSORS: tuple[MyUsageSensorDescription, ...] = (
             "reading": d["reclaimed"]["reading"],
             "meter":   d["meters"]["reclaimed"],
         },
+    ),
+    MyUsageSensorDescription(
+        key="electric_last_posted",
+        name="Electric Last Posted",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-outline",
+        value_fn=lambda d: _parse_posted(d["electric"]["posted"]),
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="water_last_posted",
+        name="Water Last Posted",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-outline",
+        value_fn=lambda d: _parse_posted(d["water"]["posted"]),
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="reclaimed_last_posted",
+        name="Reclaimed Water Last Posted",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-outline",
+        value_fn=lambda d: _parse_posted(d["reclaimed"]["posted"]),
+        attr_fn=None,
     ),
 )
 
