@@ -294,7 +294,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         try:
             data = await self.hass.async_add_executor_job(
-                _fetch_ouc_data, self._email, self._password
+                _fetch_myusage_data, self._email, self._password
             )
         except ConfigEntryAuthFailed:
             raise
