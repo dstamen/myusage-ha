@@ -1,12 +1,11 @@
 {
   "domain": "myusage",
   "name": "MyUsage",
-  "codeowners": ["@dstamen"],
   "config_flow": true,
-  "dependencies": ["recorder"],
-  "documentation": "https://github.com/dstamen/myusage-ha",
+  "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/dstamen/myusage-ha/issues",
+  "documentation": "https://github.com/dstamen/myusage-ha",
   "requirements": [],
+  "codeowners": ["@dstamen"],
   "version": "0.1.1-beta"
 }
