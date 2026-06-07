@@ -1,7 +1,7 @@
 {
   "domain": "myusage",
   "name": "MyUsage",
-  "version": "0.1.0-beta",
+  "version": "0.1.1-beta",
   "config_flow": true,
   "documentation": "https://github.com/dstamen/myusage-ha",
   "issue_tracker": "https://github.com/dstamen/myusage-ha/issues",

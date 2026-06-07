@@ -1,5 +1,8 @@
 # MyUsage
 
+[![Version](https://img.shields.io/github/v/release/dstamen/myusage-ha?label=version)](https://github.com/dstamen/myusage-ha/releases/latest)
+[![Validate for HACS](https://github.com/dstamen/myusage-ha/workflows/Validate%20with%20hassfest%20and%20HACS/badge.svg)](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml)
+
 Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
 
 Works with any utility using Exceleron's MyUsage platform — Orlando Utilities Commission (OUC), Tampa Electric, and many others.
@@ -10,12 +13,12 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 ## Features
 
-✅ **4 sensors** — electric (kWh + kW demand), water, reclaimed water  
-✅ **Hourly updates** — checks for new readings every hour  
-✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages  
-✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard  
-✅ **Zero config** — auto-detects your meters, works for any supported utility  
-✅ **stdlib only** — no `pip install` required, works on HAOS  
+✅ **4 sensors** — electric (kWh + kW demand), water, reclaimed water
+✅ **Hourly updates** — checks for new readings every hour
+✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages
+✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard
+✅ **Zero config** — auto-detects your meters, works for any supported utility
+✅ **stdlib only** — no `pip install` required, works on HAOS
 
 ---
 
@@ -42,7 +45,7 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 All sensors include meter numbers, reading types, and posted timestamps in their attributes. The `history` attribute contains the last 30 days of readings (used for month-to-date calculations).
 
-**Optional: Month-to-Date Totals**
+### Optional: Month-to-Date Totals**
 
 Add template sensors to calculate MTD totals from history:
 
@@ -97,6 +100,7 @@ cards:
 5. **Chart display** — statistics-graph cards show exact daily values, not averages
 
 The key difference from command-line approach:
+
 - ✅ Stored in HA's native integration registry
 - ✅ Automatic stats injection (no manual backfill)
 - ✅ Credentials encrypted in config entry (not exposed in YAML)
@@ -118,15 +122,18 @@ The key difference from command-line approach:
 ## Troubleshooting
 
 **Sensors showing "unavailable":**
+
 - Integration may still be fetching on first run (1–2 min)
 - Check Settings → Devices & Services → Integrations for "MyUsage" errors
 - Verify email/password are correct
 
 **Charts show old data:**
+
 - Statistics populate hourly after first fetch; wait 1–2 hours for backfill
 - Restart HA if charts still blank after waiting
 
 **Login errors:**
+
 - Double-check your utility email and password (case-sensitive)
 - If you changed your password, re-enter it in the integration settings
 
