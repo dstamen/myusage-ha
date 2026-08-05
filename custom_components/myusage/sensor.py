@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower
+from homeassistant.const import UnitOfEnergy, UnitOfPower, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -94,6 +94,36 @@ SENSORS: tuple[MyUsageSensorDescription, ...] = (
             "reading": d["reclaimed"]["reading"],
             "meter":   d["meters"]["reclaimed"],
         },
+    ),
+    MyUsageSensorDescription(
+        key="electric_reading",
+        name="Electric Meter Reading",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:counter",
+        value_fn=lambda d: d["electric"]["reading"],
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="water_reading",
+        name="Water Meter Reading",
+        native_unit_of_measurement=UnitOfVolume.GALLONS,
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:counter",
+        value_fn=lambda d: d["water"]["reading"],
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="reclaimed_reading",
+        name="Reclaimed Water Meter Reading",
+        native_unit_of_measurement=UnitOfVolume.GALLONS,
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:counter",
+        value_fn=lambda d: d["reclaimed"]["reading"],
+        attr_fn=None,
     ),
     MyUsageSensorDescription(
         key="electric_last_posted",

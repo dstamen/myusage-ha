@@ -13,7 +13,7 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 ## Features
 
-✅ **7 sensors** — electric (kWh + kW demand), water, reclaimed water, and last posted timestamps for each
+✅ **10 sensors** — electric (kWh + kW demand + meter reading), water (usage + meter reading), reclaimed water (usage + meter reading), and last posted timestamps for each
 ✅ **Hourly updates** — checks for new readings every hour
 ✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages
 ✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard
@@ -40,11 +40,16 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 |--------|-------|------|
 | `sensor.myusage_electric` | Last daily kWh | kWh |
 | `sensor.myusage_electric_peak_demand` | Peak kW | kW |
+| `sensor.myusage_electric_reading` | Cumulative meter reading | kWh |
 | `sensor.myusage_water` | Last daily water usage | gal |
+| `sensor.myusage_water_reading` | Cumulative meter reading | gal |
 | `sensor.myusage_reclaimed_water` | Last daily reclaimed usage | gal |
+| `sensor.myusage_reclaimed_reading` | Cumulative meter reading | gal |
 | `sensor.myusage_electric_last_posted` | When electric reading was posted | text |
 | `sensor.myusage_water_last_posted` | When water reading was posted | text |
 | `sensor.myusage_reclaimed_water_last_posted` | When reclaimed reading was posted | text |
+
+The `*_reading` sensors use `state_class: total_increasing` — they report your actual cumulative meter value and work natively with HA's **Energy dashboard** (Settings → Energy → Add electricity/water grid source).
 
 All sensors include meter numbers, reading types, and posted timestamps in their attributes. The `history` attribute contains the last 30 days of readings (used for month-to-date calculations).
 
