@@ -437,32 +437,45 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                 row = c.fetchone()
                 if row:
                     meta_id = row[0]
-                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=0 WHERE id=?", (meta_id,))
+                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=1 WHERE id=?", (meta_id,))
                 else:
                     c.execute(
                         "INSERT INTO statistics_meta "
                         "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
                         "VALUES (?,?,?,?,?,?)",
-                        (statistic_id, DOMAIN, unit, 1, 0, name)
+                        (statistic_id, DOMAIN, unit, 1, 1, name)
                     )
                     meta_id = c.lastrowid
 
-                for h in sorted(hourly, key=lambda x: (x["date"], x["hour"])):
+                sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
+                if sorted_hourly:
+                    earliest_ts = parse_hourly_ts(sorted_hourly[0]["date"], sorted_hourly[0]["hour"])
+                    c.execute(
+                        "SELECT sum FROM statistics WHERE metadata_id=? AND start_ts<? ORDER BY start_ts DESC LIMIT 1",
+                        (meta_id, earliest_ts)
+                    )
+                    prior = c.fetchone()
+                    running_sum = prior[0] if prior else 0.0
+                else:
+                    running_sum = 0.0
+
+                for h in sorted_hourly:
                     val = float(h.get("kwh", 0))
                     ts  = parse_hourly_ts(h["date"], h["hour"])
-                    c.execute("SELECT id, mean FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
+                    running_sum += val
+                    c.execute("SELECT id, mean, sum FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
                     existing = c.fetchone()
                     if existing:
-                        if existing[1] != val:
+                        if existing[1] != val or existing[2] != running_sum:
                             c.execute(
-                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, created_ts=? WHERE id=?",
-                                (val, val, val, val, now_ts, existing[0])
+                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, sum=?, created_ts=? WHERE id=?",
+                                (val, val, val, val, running_sum, now_ts, existing[0])
                             )
                     else:
                         c.execute(
-                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state) "
-                            "VALUES (?,?,?,?,?,?,?)",
-                            (meta_id, now_ts, ts, val, val, val, val)
+                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state, sum) "
+                            "VALUES (?,?,?,?,?,?,?,?)",
+                            (meta_id, now_ts, ts, val, val, val, val, running_sum)
                         )
 
             for statistic_id, name, unit, history, value_key in daily_datasets:
@@ -470,32 +483,45 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                 row = c.fetchone()
                 if row:
                     meta_id = row[0]
-                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=0 WHERE id=?", (meta_id,))
+                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=1 WHERE id=?", (meta_id,))
                 else:
                     c.execute(
                         "INSERT INTO statistics_meta "
                         "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
                         "VALUES (?,?,?,?,?,?)",
-                        (statistic_id, DOMAIN, unit, 1, 0, name)
+                        (statistic_id, DOMAIN, unit, 1, 1, name)
                     )
                     meta_id = c.lastrowid
 
-                for h in sorted(history, key=lambda x: x["d"]):
+                sorted_hist = sorted(history, key=lambda x: x["d"])
+                if sorted_hist:
+                    earliest_ts = parse_ts(sorted_hist[0]["d"])
+                    c.execute(
+                        "SELECT sum FROM statistics WHERE metadata_id=? AND start_ts<? ORDER BY start_ts DESC LIMIT 1",
+                        (meta_id, earliest_ts)
+                    )
+                    prior = c.fetchone()
+                    running_sum = prior[0] if prior else 0.0
+                else:
+                    running_sum = 0.0
+
+                for h in sorted_hist:
                     val = float(h.get(value_key, 0))
                     ts  = parse_ts(h["d"])
-                    c.execute("SELECT id, mean FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
+                    running_sum += val
+                    c.execute("SELECT id, mean, sum FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
                     existing = c.fetchone()
                     if existing:
-                        if existing[1] != val:
+                        if existing[1] != val or existing[2] != running_sum:
                             c.execute(
-                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, created_ts=? WHERE id=?",
-                                (val, val, val, val, now_ts, existing[0])
+                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, sum=?, created_ts=? WHERE id=?",
+                                (val, val, val, val, running_sum, now_ts, existing[0])
                             )
                     else:
                         c.execute(
-                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state) "
-                            "VALUES (?,?,?,?,?,?,?)",
-                            (meta_id, now_ts, ts, val, val, val, val)
+                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state, sum) "
+                            "VALUES (?,?,?,?,?,?,?,?)",
+                            (meta_id, now_ts, ts, val, val, val, val, running_sum)
                         )
 
             conn.commit()
