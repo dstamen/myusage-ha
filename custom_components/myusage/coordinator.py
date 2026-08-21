@@ -74,6 +74,88 @@ class _TableParser(HTMLParser):
             self._cell_text.append(data)
 
 
+class _HourlyTableParser(HTMLParser):
+    """Parse the gridHourlyUsage table (7 days × 24 hours grid)."""
+    def __init__(self):
+        super().__init__()
+        self._in_table = self._in_cell = False
+        self._cell_text: list[str] = []
+        self._current_row: list[str] = []
+        self.rows: list[list[str]] = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "table" and attrs.get("id") == "gridHourlyUsage":
+            self._in_table = True
+        if not self._in_table:
+            return
+        if tag == "tr":
+            self._current_row = []
+        if tag in ("td", "th"):
+            self._in_cell = True
+            self._cell_text = []
+
+    def handle_endtag(self, tag):
+        if not self._in_table:
+            return
+        if tag in ("td", "th") and self._in_cell:
+            self._in_cell = False
+            self._current_row.append("".join(self._cell_text).strip())
+        if tag == "tr" and self._current_row:
+            self.rows.append(self._current_row)
+            self._current_row = []
+        if tag == "table" and self._in_table:
+            self._in_table = False
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self._cell_text.append(data)
+
+
+def _parse_hourly_table(html: str) -> list[dict]:
+    """Return list of {date, hour, kwh} from gridHourlyUsage table."""
+    p = _HourlyTableParser()
+    p.feed(html)
+    rows = p.rows
+    if len(rows) < 5:
+        return []
+
+    today = datetime.now()
+
+    def infer_year(md: str) -> str:
+        parts = md.split("/")
+        if len(parts) != 2:
+            return md
+        m, d = int(parts[0]), int(parts[1])
+        year = today.year
+        if m > today.month or (m == today.month and d > today.day):
+            year -= 1
+        return f"{m:02d}/{d:02d}/{year}"
+
+    # Row 0: ["", "MM/DD", "MM/DD", ...] — 7 date headers
+    dates = [infer_year(c) for c in rows[0][1:] if c and "/" in c]
+
+    result = []
+    # Rows 0-3 are headers; data rows start at 4
+    for row in rows[4:]:
+        if not row or not row[0] or " - " not in row[0]:
+            continue
+        try:
+            hour = datetime.strptime(row[0].split(" - ")[0].strip(), "%I:%M %p").hour
+        except ValueError:
+            continue
+        # kWh at cols 2, 4, 6, ... (col 1 = °F, col 2 = kWh per day)
+        for i, date in enumerate(dates):
+            kwh_col = 2 + i * 2
+            if kwh_col < len(row):
+                try:
+                    kwh = float(row[kwh_col])
+                except (ValueError, TypeError):
+                    kwh = 0.0
+                result.append({"date": date, "hour": hour, "kwh": kwh})
+    return result
+
+
 def _parse_table(html: str) -> list[list[dict]]:
     p = _TableParser()
     p.feed(html)
@@ -171,10 +253,21 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
         f"&appPageScreenSub=Usage%20History&appFlow={app_flow}&"
     )
 
+    hourly_base = (
+        f"{DATA_URL}?appPage=Postpaid&appPageScreen=History"
+        f"&appPageScreenSub=Usage%20History&appFlow={app_flow}"
+        f"&appTransition=View+Hourly+Usage"
+    )
+
     # Electric history (default GET)
     elec_html, _ = _get(opener, history_base)
     csrf     = re.search(r'name="cf_CSRFToken"\s+value="([^"]+)"', elec_html).group(1)
     csrf_web = re.search(r'name="cf_CSRFToken_web"\s+value="([^"]+)"', elec_html).group(1)
+
+    # Hourly electric (GET)
+    hourly_elec_html, _ = _get(opener, hourly_base + "&Service=Electric")
+    # Hourly water (GET)
+    hourly_water_html, _ = _get(opener, hourly_base + "&Service=Water")
 
     # Water history (POST)
     water_html, _ = _post(opener, history_base, {
@@ -251,6 +344,7 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
             "type":      le.get("type", ""),
             "mtd_kwh":   mtd(elec_hist, "kwh"),
             "history":   elec_hist,
+            "hourly":    _parse_hourly_table(hourly_elec_html),
         },
         "water": {
             "last_gal":  lw.get("gal", 0),
@@ -259,6 +353,7 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
             "type":      lw.get("type", ""),
             "mtd_gal":   mtd(water_hist, "gal"),
             "history":   water_hist,
+            "hourly":    _parse_hourly_table(hourly_water_html),
         },
         "reclaimed": {
             "last_gal":  lr.get("gal", 0),
@@ -315,58 +410,92 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             p = date_str.split("/")
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc).timestamp()
 
-        datasets = [
-            ("myusage:electric_kwh", "Electric",        "kWh", data["electric"]["history"], "kwh"),
-            ("myusage:water_gal",    "Water",           "gal", data["water"]["history"],    "gal"),
-            ("myusage:reclaimed_gal","Reclaimed Water", "gal", data["reclaimed"]["history"],"gal"),
+        # Hourly datasets (mean only — no running sum, avoids restart-reset issues)
+        hourly_datasets = [
+            ("myusage:electric_kwh", "Electric",  "kWh", data["electric"].get("hourly", []), "kwh"),
+            ("myusage:water_gal",    "Water",      "gal", data["water"].get("hourly", []),    "kwh"),
+        ]
+        # Daily fallback for reclaimed (no hourly endpoint)
+        daily_datasets = [
+            ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"], "gal"),
         ]
 
         now_ts = datetime.now(timezone.utc).timestamp()
+
+        def parse_hourly_ts(date: str, hour: int) -> float:
+            p = date.split("/")
+            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=timezone.utc).timestamp()
 
         try:
             conn = sqlite3.connect(db_path)
             c = conn.cursor()
 
-            for statistic_id, name, unit, history, value_key in datasets:
+            for statistic_id, name, unit, hourly, value_key in hourly_datasets:
+                if not hourly:
+                    continue
                 c.execute("SELECT id FROM statistics_meta WHERE statistic_id=?", (statistic_id,))
                 row = c.fetchone()
                 if row:
                     meta_id = row[0]
-                    c.execute(
-                        "UPDATE statistics_meta SET has_mean=1, has_sum=1 WHERE id=?",
-                        (meta_id,)
-                    )
+                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=0 WHERE id=?", (meta_id,))
                 else:
                     c.execute(
                         "INSERT INTO statistics_meta "
                         "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
                         "VALUES (?,?,?,?,?,?)",
-                        (statistic_id, DOMAIN, unit, 1, 1, name)
+                        (statistic_id, DOMAIN, unit, 1, 0, name)
                     )
                     meta_id = c.lastrowid
 
-                running_sum = 0.0
-                for h in sorted(history, key=lambda x: x["d"]):
-                    val = float(h.get(value_key, 0))
-                    ts  = parse_ts(h["d"])
-                    running_sum += val
-                    c.execute(
-                        "SELECT id, mean FROM statistics WHERE metadata_id=? AND start_ts=?",
-                        (meta_id, ts)
-                    )
+                for h in sorted(hourly, key=lambda x: (x["date"], x["hour"])):
+                    val = float(h.get("kwh", 0))
+                    ts  = parse_hourly_ts(h["date"], h["hour"])
+                    c.execute("SELECT id, mean FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
                     existing = c.fetchone()
                     if existing:
                         if existing[1] != val:
                             c.execute(
-                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, sum=?, created_ts=? WHERE id=?",
-                                (val, val, val, val, running_sum, now_ts, existing[0])
+                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, created_ts=? WHERE id=?",
+                                (val, val, val, val, now_ts, existing[0])
                             )
                     else:
                         c.execute(
-                            "INSERT INTO statistics "
-                            "(metadata_id, created_ts, start_ts, mean, min, max, state, sum) "
-                            "VALUES (?,?,?,?,?,?,?,?)",
-                            (meta_id, now_ts, ts, val, val, val, val, running_sum)
+                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (meta_id, now_ts, ts, val, val, val, val)
+                        )
+
+            for statistic_id, name, unit, history, value_key in daily_datasets:
+                c.execute("SELECT id FROM statistics_meta WHERE statistic_id=?", (statistic_id,))
+                row = c.fetchone()
+                if row:
+                    meta_id = row[0]
+                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=0 WHERE id=?", (meta_id,))
+                else:
+                    c.execute(
+                        "INSERT INTO statistics_meta "
+                        "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (statistic_id, DOMAIN, unit, 1, 0, name)
+                    )
+                    meta_id = c.lastrowid
+
+                for h in sorted(history, key=lambda x: x["d"]):
+                    val = float(h.get(value_key, 0))
+                    ts  = parse_ts(h["d"])
+                    c.execute("SELECT id, mean FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
+                    existing = c.fetchone()
+                    if existing:
+                        if existing[1] != val:
+                            c.execute(
+                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, created_ts=? WHERE id=?",
+                                (val, val, val, val, now_ts, existing[0])
+                            )
+                    else:
+                        c.execute(
+                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (meta_id, now_ts, ts, val, val, val, val)
                         )
 
             conn.commit()

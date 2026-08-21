@@ -15,8 +15,8 @@ Works with any utility using Exceleron's MyUsage platform — Orlando Utilities 
 
 ✅ **10 sensors** — electric (kWh + kW demand + meter reading), water (usage + meter reading), reclaimed water (usage + meter reading), and last posted timestamps for each
 ✅ **Hourly updates** — checks for new readings every hour
-✅ **Daily statistics** — auto-injected into HA's SQLite database, shows exact readings not averages
-✅ **30-day charts** — statistics-graph cards ready to drop into your dashboard
+✅ **Hourly statistics** — auto-injected into HA's SQLite database, 7 days × 24 hours of real per-hour readings
+✅ **7-day hourly charts** — statistics-graph cards show real per-hour usage, not daily spikes
 ✅ **Zero config** — auto-detects your meters, works for any supported utility
 ✅ **stdlib only** — no `pip install` required, works on HAOS
 
