@@ -317,9 +317,9 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
     lr = latest(reclaimed_rows)
 
     # Build trimmed history for attributes and MTD calcs
-    elec_hist    = [{"d": r["posted"].split(" ")[0], "kwh": r["kwh"], "kw": r["kw"], "t": r["type"]} for r in elec_rows]
-    water_hist   = [{"d": r["posted"].split(" ")[0], "gal": r["gal"]} for r in water_rows]
-    reclaim_hist = [{"d": r["posted"].split(" ")[0], "gal": r["gal"]} for r in reclaimed_rows]
+    elec_hist    = [{"d": r["posted"].split(" ")[0], "kwh": r["kwh"], "kw": r["kw"], "t": r["type"], "reading": r["reading"]} for r in elec_rows]
+    water_hist   = [{"d": r["posted"].split(" ")[0], "gal": r["gal"], "reading": r["reading"]} for r in water_rows]
+    reclaim_hist = [{"d": r["posted"].split(" ")[0], "gal": r["gal"], "reading": r["reading"]} for r in reclaimed_rows]
 
     # MTD totals
     m_now = today.month
@@ -400,7 +400,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         return data
 
     async def _async_inject_statistics(self, data: dict) -> None:
-        """Inject daily-aggregated statistics using HA's recorder API."""
+        """Inject daily statistics using meter readings as stable sum values."""
         try:
             from homeassistant.components.recorder.statistics import async_import_statistics
             from homeassistant.components.recorder.models import (
@@ -416,33 +416,30 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             p = date_str.split("/")
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
 
-        def _aggregate_hourly(hourly: list[dict], val_key: str) -> dict[str, float]:
-            """Sum hourly values into {date: total}."""
-            totals: dict[str, float] = {}
-            for h in hourly:
-                d = h["date"]
-                totals[d] = totals.get(d, 0.0) + float(h.get(val_key, 0))
-            return totals
-
-        # Aggregate hourly → daily totals; no running sum so re-injection is idempotent
-        elec_daily = _aggregate_hourly(data["electric"].get("hourly", []), "kwh")
-        water_daily = _aggregate_hourly(data["water"].get("hourly", []), "kwh")
-
+        # Use absolute meter readings as sum — monotonically increasing, stable across re-injections.
+        # stat_types: change on the card then gives the daily usage (delta between readings).
         daily_datasets = [
-            ("myusage:electric_kwh",  "Electric",        "kWh", elec_daily),
-            ("myusage:water_gal",     "Water",            "gal", water_daily),
+            (
+                "myusage:electric_kwh", "Electric", "kWh",
+                [(h["d"], float(h.get("kwh", 0)), float(h.get("reading", 0))) for h in data["electric"]["history"]],
+            ),
+            (
+                "myusage:water_gal", "Water", "gal",
+                [(h["d"], float(h.get("gal", 0)), float(h.get("reading", 0))) for h in data["water"]["history"]],
+            ),
+            (
+                "myusage:reclaimed_gal", "Reclaimed Water", "gal",
+                [(h["d"], float(h.get("gal", 0)), float(h.get("reading", 0))) for h in data["reclaimed"]["history"]],
+            ),
         ]
-        # Reclaimed is already daily history
-        reclaim_daily = {h["d"]: float(h.get("gal", 0)) for h in data["reclaimed"]["history"]}
-        daily_datasets.append(("myusage:reclaimed_gal", "Reclaimed Water", "gal", reclaim_daily))
 
         try:
-            for statistic_id, name, unit, daily in daily_datasets:
-                if not daily:
+            for statistic_id, name, unit, rows in daily_datasets:
+                if not rows:
                     continue
                 metadata: StatisticMetaData = {
                     "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": False,
+                    "has_sum": True,
                     "name": name,
                     "source": DOMAIN,
                     "statistic_id": statistic_id,
@@ -451,14 +448,17 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                 stats = [
                     StatisticData(
                         start=_daily_dt(date),
-                        mean=total,
-                        min=total,
-                        max=total,
-                        state=total,
+                        mean=usage,
+                        min=usage,
+                        max=usage,
+                        state=usage,
+                        sum=reading,
                     )
-                    for date, total in sorted(daily.items())
+                    for date, usage, reading in sorted(rows, key=lambda x: x[0])
+                    if reading > 0
                 ]
-                async_import_statistics(self.hass, metadata, stats)
+                if stats:
+                    async_import_statistics(self.hass, metadata, stats)
 
             _LOGGER.debug("MyUsage daily statistics imported via recorder API")
         except Exception as exc:
