@@ -419,13 +419,36 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             local_midnight = datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=local_tz)
             return local_midnight.astimezone(timezone.utc)
 
+        def _anchor_sums(rows: list[tuple[str, float]], anchor: float) -> list[tuple[str, float, float]]:
+            """Compute stable sum values by working backwards from an anchor meter reading.
+
+            anchor = current meter reading (absolute). We know the most recent
+            row's sum = anchor. Each earlier row's sum = next_row_sum - next_row_usage.
+            This gives a monotonically increasing sum that is stable across re-injections
+            as long as anchor and usage values don't change.
+            """
+            sorted_rows = sorted((d, u) for d, u in rows if u > 0)
+            if not sorted_rows:
+                return []
+            result = []
+            running = anchor
+            for date, usage in reversed(sorted_rows):
+                result.append((date, usage, running))
+                running -= usage
+            return list(reversed(result))
+
+        raw_electric = [(h["d"], float(h.get("kwh", 0))) for h in data["electric"]["history"]]
+        raw_water    = [(h["d"], float(h.get("gal", 0))) for h in data["water"]["history"]]
+        raw_reclaim  = [(h["d"], float(h.get("gal", 0))) for h in data["reclaimed"]["history"]]
+
+        electric_anchor = float(data["electric"].get("reading", 0))
+        water_anchor    = float(data["water"].get("reading", 0))
+        reclaim_anchor  = float(data["reclaimed"].get("reading", 0))
+
         daily_datasets = [
-            ("myusage:electric_kwh", "Electric", "kWh",
-             [(h["d"], float(h.get("kwh", 0))) for h in data["electric"]["history"]]),
-            ("myusage:water_gal", "Water", "gal",
-             [(h["d"], float(h.get("gal", 0))) for h in data["water"]["history"]]),
-            ("myusage:reclaimed_gal", "Reclaimed Water", "gal",
-             [(h["d"], float(h.get("gal", 0))) for h in data["reclaimed"]["history"]]),
+            ("myusage:electric_kwh",  "Electric",        "kWh", _anchor_sums(raw_electric, electric_anchor)),
+            ("myusage:water_gal",     "Water",            "gal", _anchor_sums(raw_water,    water_anchor)),
+            ("myusage:reclaimed_gal", "Reclaimed Water",  "gal", _anchor_sums(raw_reclaim,  reclaim_anchor)),
         ]
 
         try:
@@ -434,7 +457,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     continue
                 metadata: StatisticMetaData = {
                     "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": False,
+                    "has_sum": True,
                     "name": name,
                     "source": DOMAIN,
                     "statistic_id": statistic_id,
@@ -447,12 +470,11 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                         min=usage,
                         max=usage,
                         state=usage,
+                        sum=s,
                     )
-                    for date, usage in sorted(rows)
-                    if usage > 0
+                    for date, usage, s in rows
                 ]
-                if stats:
-                    async_import_statistics(self.hass, metadata, stats)
+                async_import_statistics(self.hass, metadata, stats)
 
             _LOGGER.debug("MyUsage daily statistics imported via recorder API")
         except Exception as exc:
