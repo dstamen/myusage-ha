@@ -400,7 +400,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         return data
 
     async def _async_inject_statistics(self, data: dict) -> None:
-        """Inject statistics using HA's recorder API so the frontend cache is populated."""
+        """Inject daily-aggregated statistics using HA's recorder API."""
         try:
             from homeassistant.components.recorder.statistics import async_import_statistics
             from homeassistant.components.recorder.models import (
@@ -412,75 +412,54 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             _LOGGER.error("MyUsage: cannot import recorder statistics API")
             return
 
-        def _hourly_dt(date: str, hour: int) -> datetime:
-            p = date.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=timezone.utc)
-
         def _daily_dt(date_str: str) -> datetime:
             p = date_str.split("/")
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
 
-        hourly_datasets = [
-            ("myusage:electric_kwh", "Electric", "kWh", data["electric"].get("hourly", [])),
-            ("myusage:water_gal",    "Water",     "gal", data["water"].get("hourly", [])),
-        ]
+        def _aggregate_hourly(hourly: list[dict], val_key: str) -> dict[str, float]:
+            """Sum hourly values into {date: total}."""
+            totals: dict[str, float] = {}
+            for h in hourly:
+                d = h["date"]
+                totals[d] = totals.get(d, 0.0) + float(h.get(val_key, 0))
+            return totals
+
+        # Aggregate hourly → daily totals; no running sum so re-injection is idempotent
+        elec_daily = _aggregate_hourly(data["electric"].get("hourly", []), "kwh")
+        water_daily = _aggregate_hourly(data["water"].get("hourly", []), "kwh")
+
         daily_datasets = [
-            ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"]),
+            ("myusage:electric_kwh",  "Electric",        "kWh", elec_daily),
+            ("myusage:water_gal",     "Water",            "gal", water_daily),
         ]
+        # Reclaimed is already daily history
+        reclaim_daily = {h["d"]: float(h.get("gal", 0)) for h in data["reclaimed"]["history"]}
+        daily_datasets.append(("myusage:reclaimed_gal", "Reclaimed Water", "gal", reclaim_daily))
 
         try:
-            for statistic_id, name, unit, hourly in hourly_datasets:
-                if not hourly:
+            for statistic_id, name, unit, daily in daily_datasets:
+                if not daily:
                     continue
                 metadata: StatisticMetaData = {
                     "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
+                    "has_sum": False,
                     "name": name,
                     "source": DOMAIN,
                     "statistic_id": statistic_id,
                     "unit_of_measurement": unit,
                 }
-                sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
-                stats = []
-                running_sum = 0.0
-                for h in sorted_hourly:
-                    val = float(h.get("kwh", 0))
-                    running_sum += val
-                    stats.append(StatisticData(
-                        start=_hourly_dt(h["date"], h["hour"]),
-                        mean=val,
-                        min=val,
-                        max=val,
-                        state=val,
-                        sum=running_sum,
-                    ))
+                stats = [
+                    StatisticData(
+                        start=_daily_dt(date),
+                        mean=total,
+                        min=total,
+                        max=total,
+                        state=total,
+                    )
+                    for date, total in sorted(daily.items())
+                ]
                 async_import_statistics(self.hass, metadata, stats)
 
-            for statistic_id, name, unit, history in daily_datasets:
-                metadata: StatisticMetaData = {
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
-                    "name": name,
-                    "source": DOMAIN,
-                    "statistic_id": statistic_id,
-                    "unit_of_measurement": unit,
-                }
-                sorted_hist = sorted(history, key=lambda x: x["d"])
-                stats = []
-                running_sum = 0.0
-                for h in sorted_hist:
-                    val = float(h.get("gal", 0))
-                    running_sum += val
-                    stats.append(StatisticData(
-                        start=_daily_dt(h["d"]),
-                        mean=val,
-                        min=val,
-                        max=val,
-                        state=val,
-                        sum=running_sum,
-                    ))
-                async_import_statistics(self.hass, metadata, stats)
-
-            _LOGGER.debug("MyUsage statistics imported via recorder API")
+            _LOGGER.debug("MyUsage daily statistics imported via recorder API")
         except Exception as exc:
             _LOGGER.error("MyUsage: failed to import statistics: %s", exc)
