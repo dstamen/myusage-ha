@@ -403,7 +403,11 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         """Inject statistics using HA's recorder API so the frontend cache is populated."""
         try:
             from homeassistant.components.recorder.statistics import async_import_statistics
-            from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+            from homeassistant.components.recorder.models import (
+                StatisticData,
+                StatisticMetaData,
+                StatisticMeanType,
+            )
         except ImportError:
             _LOGGER.error("MyUsage: cannot import recorder statistics API")
             return
@@ -428,14 +432,14 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             for statistic_id, name, unit, hourly in hourly_datasets:
                 if not hourly:
                     continue
-                metadata = StatisticMetaData(
-                    has_mean=True,
-                    has_sum=True,
-                    name=name,
-                    source=DOMAIN,
-                    statistic_id=statistic_id,
-                    unit_of_measurement=unit,
-                )
+                metadata: StatisticMetaData = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": name,
+                    "source": DOMAIN,
+                    "statistic_id": statistic_id,
+                    "unit_of_measurement": unit,
+                }
                 sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
                 stats = []
                 running_sum = 0.0
@@ -453,14 +457,14 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                 async_import_statistics(self.hass, metadata, stats)
 
             for statistic_id, name, unit, history in daily_datasets:
-                metadata = StatisticMetaData(
-                    has_mean=True,
-                    has_sum=True,
-                    name=name,
-                    source=DOMAIN,
-                    statistic_id=statistic_id,
-                    unit_of_measurement=unit,
-                )
+                metadata: StatisticMetaData = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": name,
+                    "source": DOMAIN,
+                    "statistic_id": statistic_id,
+                    "unit_of_measurement": unit,
+                }
                 sorted_hist = sorted(history, key=lambda x: x["d"])
                 stats = []
                 running_sum = 0.0
