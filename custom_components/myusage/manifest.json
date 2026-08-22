@@ -3,11 +3,11 @@
   "name": "MyUsage",
   "codeowners": ["@dstamen"],
   "config_flow": true,
+  "dependencies": ["recorder"],
   "documentation": "https://github.com/dstamen/myusage-ha",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/dstamen/myusage-ha/issues",
-  "dependencies": ["recorder"],
   "requirements": [],
   "version": "1.2.4"
 }
