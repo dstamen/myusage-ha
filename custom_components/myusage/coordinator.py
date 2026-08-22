@@ -413,8 +413,11 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             return
 
         def _daily_dt(date_str: str) -> datetime:
+            from homeassistant.util import dt as dt_util
             p = date_str.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
+            local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
+            local_midnight = datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=local_tz)
+            return local_midnight.astimezone(timezone.utc)
 
         daily_datasets = [
             ("myusage:electric_kwh", "Electric", "kWh",
