@@ -400,7 +400,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         return data
 
     async def _async_inject_statistics(self, data: dict) -> None:
-        """Inject daily statistics using meter readings as stable sum values."""
+        """Inject daily-aggregated statistics using HA's recorder API."""
         try:
             from homeassistant.components.recorder.statistics import async_import_statistics
             from homeassistant.components.recorder.models import (
@@ -416,21 +416,13 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             p = date_str.split("/")
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
 
-        # Use absolute meter readings as sum — monotonically increasing, stable across re-injections.
-        # stat_types: change on the card then gives the daily usage (delta between readings).
         daily_datasets = [
-            (
-                "myusage:electric_kwh", "Electric", "kWh",
-                [(h["d"], float(h.get("kwh", 0)), float(h.get("reading", 0))) for h in data["electric"]["history"]],
-            ),
-            (
-                "myusage:water_gal", "Water", "gal",
-                [(h["d"], float(h.get("gal", 0)), float(h.get("reading", 0))) for h in data["water"]["history"]],
-            ),
-            (
-                "myusage:reclaimed_gal", "Reclaimed Water", "gal",
-                [(h["d"], float(h.get("gal", 0)), float(h.get("reading", 0))) for h in data["reclaimed"]["history"]],
-            ),
+            ("myusage:electric_kwh", "Electric", "kWh",
+             [(h["d"], float(h.get("kwh", 0))) for h in data["electric"]["history"]]),
+            ("myusage:water_gal", "Water", "gal",
+             [(h["d"], float(h.get("gal", 0))) for h in data["water"]["history"]]),
+            ("myusage:reclaimed_gal", "Reclaimed Water", "gal",
+             [(h["d"], float(h.get("gal", 0))) for h in data["reclaimed"]["history"]]),
         ]
 
         try:
@@ -439,7 +431,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     continue
                 metadata: StatisticMetaData = {
                     "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
+                    "has_sum": False,
                     "name": name,
                     "source": DOMAIN,
                     "statistic_id": statistic_id,
@@ -452,10 +444,9 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                         min=usage,
                         max=usage,
                         state=usage,
-                        sum=reading,
                     )
-                    for date, usage, reading in sorted(rows, key=lambda x: x[0])
-                    if reading > 0
+                    for date, usage in sorted(rows)
+                    if usage > 0
                 ]
                 if stats:
                     async_import_statistics(self.hass, metadata, stats)
