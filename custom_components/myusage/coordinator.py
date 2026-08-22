@@ -396,136 +396,87 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         except Exception as exc:
             raise UpdateFailed(f"Error fetching MyUsage data: {exc}") from exc
 
-        # Inject statistics after fetching
-        await self.hass.async_add_executor_job(self._inject_statistics, data)
+        await self._async_inject_statistics(data)
         return data
 
-    def _inject_statistics(self, data: dict) -> None:
-        """Write daily readings to HA's SQLite statistics database."""
-        import sqlite3
+    async def _async_inject_statistics(self, data: dict) -> None:
+        """Inject statistics using HA's recorder API so the frontend cache is populated."""
+        try:
+            from homeassistant.components.recorder.statistics import async_import_statistics
+            from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+        except ImportError:
+            _LOGGER.error("MyUsage: cannot import recorder statistics API")
+            return
 
-        db_path = self.hass.config.path("home-assistant_v2.db")
-
-        def parse_ts(date_str: str) -> float:
-            p = date_str.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc).timestamp()
-
-        # Hourly datasets (mean only — no running sum, avoids restart-reset issues)
-        hourly_datasets = [
-            ("myusage:electric_kwh", "Electric",  "kWh", data["electric"].get("hourly", []), "kwh"),
-            ("myusage:water_gal",    "Water",      "gal", data["water"].get("hourly", []),    "kwh"),
-        ]
-        # Daily fallback for reclaimed (no hourly endpoint)
-        daily_datasets = [
-            ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"], "gal"),
-        ]
-
-        now_ts = datetime.now(timezone.utc).timestamp()
-
-        def parse_hourly_ts(date: str, hour: int) -> float:
+        def _hourly_dt(date: str, hour: int) -> datetime:
             p = date.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=timezone.utc).timestamp()
+            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=timezone.utc)
+
+        def _daily_dt(date_str: str) -> datetime:
+            p = date_str.split("/")
+            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
+
+        hourly_datasets = [
+            ("myusage:electric_kwh", "Electric", "kWh", data["electric"].get("hourly", [])),
+            ("myusage:water_gal",    "Water",     "gal", data["water"].get("hourly", [])),
+        ]
+        daily_datasets = [
+            ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"]),
+        ]
 
         try:
-            conn = sqlite3.connect(db_path)
-            c = conn.cursor()
-
-            for statistic_id, name, unit, hourly, value_key in hourly_datasets:
+            for statistic_id, name, unit, hourly in hourly_datasets:
                 if not hourly:
                     continue
-                c.execute("SELECT id FROM statistics_meta WHERE statistic_id=?", (statistic_id,))
-                row = c.fetchone()
-                if row:
-                    meta_id = row[0]
-                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=1 WHERE id=?", (meta_id,))
-                else:
-                    c.execute(
-                        "INSERT INTO statistics_meta "
-                        "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
-                        "VALUES (?,?,?,?,?,?)",
-                        (statistic_id, DOMAIN, unit, 1, 1, name)
-                    )
-                    meta_id = c.lastrowid
-
+                metadata = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=True,
+                    name=name,
+                    source=DOMAIN,
+                    statistic_id=statistic_id,
+                    unit_of_measurement=unit,
+                )
                 sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
-                if sorted_hourly:
-                    earliest_ts = parse_hourly_ts(sorted_hourly[0]["date"], sorted_hourly[0]["hour"])
-                    c.execute(
-                        "SELECT sum FROM statistics WHERE metadata_id=? AND start_ts<? ORDER BY start_ts DESC LIMIT 1",
-                        (meta_id, earliest_ts)
-                    )
-                    prior = c.fetchone()
-                    running_sum = prior[0] if prior else 0.0
-                else:
-                    running_sum = 0.0
-
+                stats = []
+                running_sum = 0.0
                 for h in sorted_hourly:
                     val = float(h.get("kwh", 0))
-                    ts  = parse_hourly_ts(h["date"], h["hour"])
                     running_sum += val
-                    c.execute("SELECT id, mean, sum FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
-                    existing = c.fetchone()
-                    if existing:
-                        if existing[1] != val or existing[2] != running_sum:
-                            c.execute(
-                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, sum=?, created_ts=? WHERE id=?",
-                                (val, val, val, val, running_sum, now_ts, existing[0])
-                            )
-                    else:
-                        c.execute(
-                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state, sum) "
-                            "VALUES (?,?,?,?,?,?,?,?)",
-                            (meta_id, now_ts, ts, val, val, val, val, running_sum)
-                        )
+                    stats.append(StatisticData(
+                        start=_hourly_dt(h["date"], h["hour"]),
+                        mean=val,
+                        min=val,
+                        max=val,
+                        state=val,
+                        sum=running_sum,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
 
-            for statistic_id, name, unit, history, value_key in daily_datasets:
-                c.execute("SELECT id FROM statistics_meta WHERE statistic_id=?", (statistic_id,))
-                row = c.fetchone()
-                if row:
-                    meta_id = row[0]
-                    c.execute("UPDATE statistics_meta SET has_mean=1, has_sum=1 WHERE id=?", (meta_id,))
-                else:
-                    c.execute(
-                        "INSERT INTO statistics_meta "
-                        "(statistic_id, source, unit_of_measurement, has_mean, has_sum, name) "
-                        "VALUES (?,?,?,?,?,?)",
-                        (statistic_id, DOMAIN, unit, 1, 1, name)
-                    )
-                    meta_id = c.lastrowid
-
+            for statistic_id, name, unit, history in daily_datasets:
+                metadata = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=True,
+                    name=name,
+                    source=DOMAIN,
+                    statistic_id=statistic_id,
+                    unit_of_measurement=unit,
+                )
                 sorted_hist = sorted(history, key=lambda x: x["d"])
-                if sorted_hist:
-                    earliest_ts = parse_ts(sorted_hist[0]["d"])
-                    c.execute(
-                        "SELECT sum FROM statistics WHERE metadata_id=? AND start_ts<? ORDER BY start_ts DESC LIMIT 1",
-                        (meta_id, earliest_ts)
-                    )
-                    prior = c.fetchone()
-                    running_sum = prior[0] if prior else 0.0
-                else:
-                    running_sum = 0.0
-
+                stats = []
+                running_sum = 0.0
                 for h in sorted_hist:
-                    val = float(h.get(value_key, 0))
-                    ts  = parse_ts(h["d"])
+                    val = float(h.get("gal", 0))
                     running_sum += val
-                    c.execute("SELECT id, mean, sum FROM statistics WHERE metadata_id=? AND start_ts=?", (meta_id, ts))
-                    existing = c.fetchone()
-                    if existing:
-                        if existing[1] != val or existing[2] != running_sum:
-                            c.execute(
-                                "UPDATE statistics SET mean=?, min=?, max=?, state=?, sum=?, created_ts=? WHERE id=?",
-                                (val, val, val, val, running_sum, now_ts, existing[0])
-                            )
-                    else:
-                        c.execute(
-                            "INSERT INTO statistics (metadata_id, created_ts, start_ts, mean, min, max, state, sum) "
-                            "VALUES (?,?,?,?,?,?,?,?)",
-                            (meta_id, now_ts, ts, val, val, val, val, running_sum)
-                        )
+                    stats.append(StatisticData(
+                        start=_daily_dt(h["d"]),
+                        mean=val,
+                        min=val,
+                        max=val,
+                        state=val,
+                        sum=running_sum,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
 
-            conn.commit()
-            conn.close()
-            _LOGGER.debug("MyUsage statistics updated successfully")
+            _LOGGER.debug("MyUsage statistics imported via recorder API")
         except Exception as exc:
-            _LOGGER.error("Failed to update MyUsage statistics: %s", exc)
+            _LOGGER.error("MyUsage: failed to import statistics: %s", exc)
