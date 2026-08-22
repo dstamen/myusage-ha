@@ -451,31 +451,51 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             ("myusage:reclaimed_gal", "Reclaimed Water",  "gal", _anchor_sums(raw_reclaim,  reclaim_anchor)),
         ]
 
-        try:
-            for statistic_id, name, unit, rows in daily_datasets:
-                if not rows:
-                    continue
-                metadata: StatisticMetaData = {
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
-                    "name": name,
-                    "source": DOMAIN,
-                    "statistic_id": statistic_id,
-                    "unit_of_measurement": unit,
-                }
-                stats = [
-                    StatisticData(
-                        start=_daily_dt(date),
-                        mean=usage,
-                        min=usage,
-                        max=usage,
-                        state=usage,
-                        sum=s,
-                    )
-                    for date, usage, s in rows
-                ]
-                async_import_statistics(self.hass, metadata, stats)
+        def _do_import(statistic_id, metadata, stats):
+            async_import_statistics(self.hass, metadata, stats)
 
-            _LOGGER.debug("MyUsage daily statistics imported via recorder API")
-        except Exception as exc:
-            _LOGGER.error("MyUsage: failed to import statistics: %s", exc)
+        def _clear_and_import(statistic_id, metadata, stats):
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import clear_statistics
+            clear_statistics(get_instance(self.hass), [statistic_id])
+            async_import_statistics(self.hass, metadata, stats)
+
+        for statistic_id, name, unit, rows in daily_datasets:
+            if not rows:
+                continue
+            metadata: StatisticMetaData = {
+                "mean_type": StatisticMeanType.ARITHMETIC,
+                "has_sum": True,
+                "name": name,
+                "source": DOMAIN,
+                "statistic_id": statistic_id,
+                "unit_of_measurement": unit,
+            }
+            stats = [
+                StatisticData(
+                    start=_daily_dt(date),
+                    mean=usage,
+                    min=usage,
+                    max=usage,
+                    state=usage,
+                    sum=s,
+                )
+                for date, usage, s in rows
+            ]
+            try:
+                _do_import(statistic_id, metadata, stats)
+            except Exception as exc:
+                if "Invalid statistic_id" in str(exc):
+                    _LOGGER.warning(
+                        "MyUsage: clearing stale metadata for %s and retrying", statistic_id
+                    )
+                    try:
+                        await self.hass.async_add_executor_job(
+                            _clear_and_import, statistic_id, metadata, stats
+                        )
+                    except Exception as exc2:
+                        _LOGGER.error("MyUsage: retry failed for %s: %s", statistic_id, exc2)
+                else:
+                    _LOGGER.error("MyUsage: failed to import %s: %s", statistic_id, exc)
+
+        _LOGGER.debug("MyUsage daily statistics imported via recorder API")
