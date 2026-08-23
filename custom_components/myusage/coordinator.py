@@ -317,9 +317,9 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
     lr = latest(reclaimed_rows)
 
     # Build trimmed history for attributes and MTD calcs
-    elec_hist    = [{"d": r["posted"].split(" ")[0], "kwh": r["kwh"], "kw": r["kw"], "t": r["type"], "reading": r["reading"]} for r in elec_rows]
-    water_hist   = [{"d": r["posted"].split(" ")[0], "gal": r["gal"], "reading": r["reading"]} for r in water_rows]
-    reclaim_hist = [{"d": r["posted"].split(" ")[0], "gal": r["gal"], "reading": r["reading"]} for r in reclaimed_rows]
+    elec_hist    = [{"d": r["posted"].split(" ")[0], "kwh": r["kwh"], "kw": r["kw"], "t": r["type"]} for r in elec_rows]
+    water_hist   = [{"d": r["posted"].split(" ")[0], "gal": r["gal"]} for r in water_rows]
+    reclaim_hist = [{"d": r["posted"].split(" ")[0], "gal": r["gal"]} for r in reclaimed_rows]
 
     # MTD totals
     m_now = today.month
@@ -400,7 +400,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
         return data
 
     async def _async_inject_statistics(self, data: dict) -> None:
-        """Inject daily-aggregated statistics using HA's recorder API."""
+        """Inject statistics using HA's recorder API so the frontend cache is populated."""
         try:
             from homeassistant.components.recorder.statistics import async_import_statistics
             from homeassistant.components.recorder.models import (
@@ -412,90 +412,75 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             _LOGGER.error("MyUsage: cannot import recorder statistics API")
             return
 
+        def _hourly_dt(date: str, hour: int) -> datetime:
+            p = date.split("/")
+            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=timezone.utc)
+
         def _daily_dt(date_str: str) -> datetime:
-            from homeassistant.util import dt as dt_util
             p = date_str.split("/")
-            local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
-            local_midnight = datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=local_tz)
-            return local_midnight.astimezone(timezone.utc)
+            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
 
-        def _anchor_sums(rows: list[tuple[str, float]], anchor: float) -> list[tuple[str, float, float]]:
-            """Compute stable sum values by working backwards from an anchor meter reading.
-
-            anchor = current meter reading (absolute). We know the most recent
-            row's sum = anchor. Each earlier row's sum = next_row_sum - next_row_usage.
-            This gives a monotonically increasing sum that is stable across re-injections
-            as long as anchor and usage values don't change.
-            """
-            sorted_rows = sorted((d, u) for d, u in rows if u > 0)
-            if not sorted_rows:
-                return []
-            result = []
-            running = anchor
-            for date, usage in reversed(sorted_rows):
-                result.append((date, usage, running))
-                running -= usage
-            return list(reversed(result))
-
-        raw_electric = [(h["d"], float(h.get("kwh", 0))) for h in data["electric"]["history"]]
-        raw_water    = [(h["d"], float(h.get("gal", 0))) for h in data["water"]["history"]]
-        raw_reclaim  = [(h["d"], float(h.get("gal", 0))) for h in data["reclaimed"]["history"]]
-
-        electric_anchor = float(data["electric"].get("reading", 0))
-        water_anchor    = float(data["water"].get("reading", 0))
-        reclaim_anchor  = float(data["reclaimed"].get("reading", 0))
-
+        hourly_datasets = [
+            ("myusage:electric_kwh", "Electric", "kWh", data["electric"].get("hourly", [])),
+            ("myusage:water_gal",    "Water",     "gal", data["water"].get("hourly", [])),
+        ]
         daily_datasets = [
-            ("myusage:electric_kwh",  "Electric",        "kWh", _anchor_sums(raw_electric, electric_anchor)),
-            ("myusage:water_gal",     "Water",            "gal", _anchor_sums(raw_water,    water_anchor)),
-            ("myusage:reclaimed_gal", "Reclaimed Water",  "gal", _anchor_sums(raw_reclaim,  reclaim_anchor)),
+            ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"]),
         ]
 
-        def _do_import(statistic_id, metadata, stats):
-            async_import_statistics(self.hass, metadata, stats)
+        try:
+            for statistic_id, name, unit, hourly in hourly_datasets:
+                if not hourly:
+                    continue
+                metadata: StatisticMetaData = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": name,
+                    "source": DOMAIN,
+                    "statistic_id": statistic_id,
+                    "unit_of_measurement": unit,
+                }
+                sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
+                stats = []
+                running_sum = 0.0
+                for h in sorted_hourly:
+                    val = float(h.get("kwh", 0))
+                    running_sum += val
+                    stats.append(StatisticData(
+                        start=_hourly_dt(h["date"], h["hour"]),
+                        mean=val,
+                        min=val,
+                        max=val,
+                        state=val,
+                        sum=running_sum,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
 
-        def _clear_and_import(statistic_id, metadata, stats):
-            from homeassistant.components.recorder import get_instance
-            from homeassistant.components.recorder.statistics import clear_statistics
-            clear_statistics(get_instance(self.hass), [statistic_id])
-            async_import_statistics(self.hass, metadata, stats)
+            for statistic_id, name, unit, history in daily_datasets:
+                metadata: StatisticMetaData = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": name,
+                    "source": DOMAIN,
+                    "statistic_id": statistic_id,
+                    "unit_of_measurement": unit,
+                }
+                sorted_hist = sorted(history, key=lambda x: x["d"])
+                stats = []
+                running_sum = 0.0
+                for h in sorted_hist:
+                    val = float(h.get("gal", 0))
+                    running_sum += val
+                    stats.append(StatisticData(
+                        start=_daily_dt(h["d"]),
+                        mean=val,
+                        min=val,
+                        max=val,
+                        state=val,
+                        sum=running_sum,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
 
-        for statistic_id, name, unit, rows in daily_datasets:
-            if not rows:
-                continue
-            metadata: StatisticMetaData = {
-                "mean_type": StatisticMeanType.ARITHMETIC,
-                "has_sum": True,
-                "name": name,
-                "source": DOMAIN,
-                "statistic_id": statistic_id,
-                "unit_of_measurement": unit,
-            }
-            stats = [
-                StatisticData(
-                    start=_daily_dt(date),
-                    mean=usage,
-                    min=usage,
-                    max=usage,
-                    state=usage,
-                    sum=s,
-                )
-                for date, usage, s in rows
-            ]
-            try:
-                _do_import(statistic_id, metadata, stats)
-            except Exception as exc:
-                if "Invalid statistic_id" in str(exc):
-                    _LOGGER.warning(
-                        "MyUsage: clearing stale metadata for %s and retrying", statistic_id
-                    )
-                    try:
-                        await self.hass.async_add_executor_job(
-                            _clear_and_import, statistic_id, metadata, stats
-                        )
-                    except Exception as exc2:
-                        _LOGGER.error("MyUsage: retry failed for %s: %s", statistic_id, exc2)
-                else:
-                    _LOGGER.error("MyUsage: failed to import %s: %s", statistic_id, exc)
-
-        _LOGGER.debug("MyUsage daily statistics imported via recorder API")
+            _LOGGER.debug("MyUsage statistics imported via recorder API")
+        except Exception as exc:
+            _LOGGER.error("MyUsage: failed to import statistics: %s", exc)
