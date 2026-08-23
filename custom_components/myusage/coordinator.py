@@ -421,15 +421,15 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=timezone.utc)
 
         hourly_datasets = [
-            ("myusage:electric_kwh", "Electric", "kWh", data["electric"].get("hourly", [])),
-            ("myusage:water_gal",    "Water",     "gal", data["water"].get("hourly", [])),
+            ("myusage:electric_kwh", "Electric", "kWh", data["electric"].get("hourly", []), data["electric"].get("reading", 0)),
+            ("myusage:water_gal",    "Water",     "gal", data["water"].get("hourly", []),    data["water"].get("reading", 0)),
         ]
         daily_datasets = [
             ("myusage:reclaimed_gal", "Reclaimed Water", "gal", data["reclaimed"]["history"]),
         ]
 
         try:
-            for statistic_id, name, unit, hourly in hourly_datasets:
+            for statistic_id, name, unit, hourly, meter_reading in hourly_datasets:
                 if not hourly:
                     continue
                 metadata: StatisticMetaData = {
@@ -441,8 +441,11 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     "unit_of_measurement": unit,
                 }
                 sorted_hourly = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
+                total_hourly = sum(float(h.get("kwh", 0)) for h in sorted_hourly)
+                # Anchor to real meter reading so sum never resets across fetches
+                base_sum = float(meter_reading) - total_hourly if meter_reading else 0.0
                 stats = []
-                running_sum = 0.0
+                running_sum = base_sum
                 for h in sorted_hourly:
                     val = float(h.get("kwh", 0))
                     running_sum += val
