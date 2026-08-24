@@ -265,20 +265,27 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
     csrf     = re.search(r'name="cf_CSRFToken"\s+value="([^"]+)"', elec_html).group(1)
     csrf_web = re.search(r'name="cf_CSRFToken_web"\s+value="([^"]+)"', elec_html).group(1)
 
-    # TEMPORARY: discover what the portal exposes, to see if a rate is available.
-    # Parses the page we already have — no extra requests. Remove after diagnosis.
-    try:
-        screens = sorted(set(re.findall(r'appPageScreen(?:Sub)?=([^&"\'>\s]+)', elec_html)))
-        _LOGGER.warning("MYUSAGE-DISCOVERY screens=%s", screens)
-        transitions = sorted(set(re.findall(r'appTransition=([^&"\'>\s]+)', elec_html)))
-        _LOGGER.warning("MYUSAGE-DISCOVERY transitions=%s", transitions)
-        money = sorted(set(re.findall(r'\$\s?\d[\d,]*\.\d{2,5}', elec_html)))[:25]
-        _LOGGER.warning("MYUSAGE-DISCOVERY money=%s", money)
-        rate_words = sorted(set(re.findall(
-            r'(?i)\b(rate|tariff|price|per\s*kwh|cost|charge|billing)\b', elec_html)))
-        _LOGGER.warning("MYUSAGE-DISCOVERY rate_words=%s", rate_words)
-    except Exception:
-        _LOGGER.exception("MYUSAGE-DISCOVERY failed")
+    # TEMPORARY: probe the Payment/Account screens for a per-unit rate.
+    # Remove after diagnosis.
+    for _screen in ("Payment", "Account"):
+        try:
+            _url = (
+                f"{DATA_URL}?appPage=Postpaid&appPageScreen={_screen}"
+                f"&appFlow={app_flow}"
+            )
+            _html, _ = _get(opener, _url)
+            _money = sorted(set(re.findall(r'\$\s?\d[\d,]*\.\d{2,5}', _html)))[:25]
+            _decimals = sorted(set(re.findall(r'\b0\.\d{3,6}\b', _html)))[:25]
+            _tables = sorted(set(re.findall(r'<table[^>]*id="([^"]+)"', _html)))
+            _labels = sorted(set(re.findall(
+                r'(?i)>\s*([A-Za-z][A-Za-z /]{2,30}(?:rate|charge|price|per kwh|per gal)'
+                r'[A-Za-z /]{0,20})\s*<', _html)))[:25]
+            _LOGGER.warning(
+                "MYUSAGE-DISCOVERY %s len=%d money=%s decimals=%s tables=%s labels=%s",
+                _screen, len(_html), _money, _decimals, _tables, _labels,
+            )
+        except Exception:
+            _LOGGER.exception("MYUSAGE-DISCOVERY %s failed", _screen)
 
     # Hourly electric (GET)
     hourly_elec_html, _ = _get(opener, hourly_base + "&Service=Electric")
