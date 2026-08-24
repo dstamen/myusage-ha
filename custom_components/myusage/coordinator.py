@@ -484,39 +484,6 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     ))
                 async_import_statistics(self.hass, metadata, stats)
 
-            # Inject hourly stats directly into the grid sensor entities so
-            # the Energy dashboard can show per-hour consumption distribution.
-            entity_hourly = [
-                ("sensor.myusage_electric_grid", "Electric Grid", "kWh",
-                 data["electric"].get("hourly", []), data["electric"].get("reading", 0)),
-                ("sensor.myusage_water_grid", "Water Grid", "gal",
-                 data["water"].get("hourly", []), data["water"].get("reading", 0)),
-            ]
-            for statistic_id, name, unit, hourly, meter_reading in entity_hourly:
-                if not hourly or not meter_reading:
-                    continue
-                meta: StatisticMetaData = {
-                    "mean_type": StatisticMeanType.ARITHMETIC,
-                    "has_sum": True,
-                    "name": name,
-                    "source": "recorder",
-                    "statistic_id": statistic_id,
-                    "unit_of_measurement": unit,
-                }
-                sorted_h = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
-                total_h = sum(float(h.get("kwh", 0)) for h in sorted_h)
-                base = float(meter_reading) - total_h
-                entity_stats = []
-                running = base
-                for h in sorted_h:
-                    val = float(h.get("kwh", 0))
-                    running += val
-                    entity_stats.append(StatisticData(
-                        start=_hourly_dt(h["date"], h["hour"]),
-                        mean=val, min=val, max=val, state=running, sum=running,
-                    ))
-                async_import_statistics(self.hass, meta, entity_stats)
-
             _LOGGER.debug("MyUsage statistics imported via recorder API")
         except Exception as exc:
             _LOGGER.error("MyUsage: failed to import statistics: %s", exc)
