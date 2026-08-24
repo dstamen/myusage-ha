@@ -265,27 +265,8 @@ def _fetch_myusage_data(email: str, password: str) -> dict:
     csrf     = re.search(r'name="cf_CSRFToken"\s+value="([^"]+)"', elec_html).group(1)
     csrf_web = re.search(r'name="cf_CSRFToken_web"\s+value="([^"]+)"', elec_html).group(1)
 
-    # TEMPORARY: probe the Payment/Account screens for a per-unit rate.
-    # Remove after diagnosis.
-    for _screen in ("Payment", "Account"):
-        try:
-            _url = (
-                f"{DATA_URL}?appPage=Postpaid&appPageScreen={_screen}"
-                f"&appFlow={app_flow}"
-            )
-            _html, _ = _get(opener, _url)
-            _money = sorted(set(re.findall(r'\$\s?\d[\d,]*\.\d{2,5}', _html)))[:25]
-            _decimals = sorted(set(re.findall(r'\b0\.\d{3,6}\b', _html)))[:25]
-            _tables = sorted(set(re.findall(r'<table[^>]*id="([^"]+)"', _html)))
-            _labels = sorted(set(re.findall(
-                r'(?i)>\s*([A-Za-z][A-Za-z /]{2,30}(?:rate|charge|price|per kwh|per gal)'
-                r'[A-Za-z /]{0,20})\s*<', _html)))[:25]
-            _LOGGER.warning(
-                "MYUSAGE-DISCOVERY %s len=%d money=%s decimals=%s tables=%s labels=%s",
-                _screen, len(_html), _money, _decimals, _tables, _labels,
-            )
-        except Exception:
-            _LOGGER.exception("MYUSAGE-DISCOVERY %s failed", _screen)
+    # Note: the portal exposes no per-unit rate — the Payment and Account
+    # screens carry no pricing data — so cost statistics are not available.
 
     # Hourly electric (GET)
     hourly_elec_html, _ = _get(opener, hourly_base + "&Service=Electric")
