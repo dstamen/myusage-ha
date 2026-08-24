@@ -403,7 +403,9 @@ class MyUsageCoordinator(DataUpdateCoordinator):
     async def _async_inject_statistics(self, data: dict) -> None:
         """Inject OUC hourly stats so they're available for dashboard cards."""
         try:
-            from homeassistant.components.recorder.statistics import async_import_statistics
+            from homeassistant.components.recorder.statistics import (
+                async_add_external_statistics,
+            )
             from homeassistant.components.recorder.models import (
                 StatisticData,
                 StatisticMetaData,
@@ -423,12 +425,12 @@ class MyUsageCoordinator(DataUpdateCoordinator):
 
         datasets = [
             ("myusage:electric_kwh", "Electric", "kWh",
-             data["electric"].get("hourly", []), data["electric"].get("reading", 0), True),
+             data["electric"].get("hourly", []), data["electric"].get("reading", 0)),
             ("myusage:water_gal", "Water", "gal",
-             data["water"].get("hourly", []), data["water"].get("reading", 0), True),
+             data["water"].get("hourly", []), data["water"].get("reading", 0)),
         ]
 
-        for statistic_id, name, unit, hourly, meter_reading, is_hourly in datasets:
+        for statistic_id, name, unit, hourly, meter_reading in datasets:
             if not hourly:
                 continue
             try:
@@ -450,9 +452,9 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     running += val
                     stats.append(StatisticData(
                         start=_hourly_dt(h["date"], h["hour"]),
-                        mean=val, min=val, max=val, state=val, sum=running,
+                        mean=val, min=val, max=val, state=running, sum=running,
                     ))
-                async_import_statistics(self.hass, metadata, stats)
+                async_add_external_statistics(self.hass, metadata, stats)
                 _LOGGER.debug("MyUsage: injected %d hourly stats for %s", len(stats), statistic_id)
             except Exception:
                 _LOGGER.exception("MyUsage: failed to inject stats for %s", statistic_id)
@@ -477,8 +479,8 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     running += val
                     stats.append(StatisticData(
                         start=_daily_dt(h["d"]),
-                        mean=val, min=val, max=val, state=val, sum=running,
+                        mean=val, min=val, max=val, state=running, sum=running,
                     ))
-                async_import_statistics(self.hass, metadata, stats)
+                async_add_external_statistics(self.hass, metadata, stats)
             except Exception:
                 _LOGGER.exception("MyUsage: failed to inject stats for myusage:reclaimed_gal")
