@@ -424,13 +424,13 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=_UTC)
 
         datasets = [
-            ("myusage:electric_kwh", "Electric", "kWh",
+            ("myusage:electric_kwh", "MyUsage Electric", "kWh", "energy",
              data["electric"].get("hourly", []), data["electric"].get("reading", 0)),
-            ("myusage:water_gal", "Water", "gal",
+            ("myusage:water_gal", "MyUsage Water", "gal", "volume",
              data["water"].get("hourly", []), data["water"].get("reading", 0)),
         ]
 
-        for statistic_id, name, unit, hourly, meter_reading in datasets:
+        for statistic_id, name, unit, unit_class, hourly, meter_reading in datasets:
             if not hourly:
                 continue
             try:
@@ -441,6 +441,7 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     "source": DOMAIN,
                     "statistic_id": statistic_id,
                     "unit_of_measurement": unit,
+                    "unit_class": unit_class,
                 }
                 sorted_h = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
                 total_h = sum(float(h.get("kwh", 0)) for h in sorted_h)
@@ -466,10 +467,11 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                 metadata = {
                     "mean_type": StatisticMeanType.ARITHMETIC,
                     "has_sum": True,
-                    "name": "Reclaimed Water",
+                    "name": "MyUsage Reclaimed Water",
                     "source": DOMAIN,
                     "statistic_id": "myusage:reclaimed_gal",
                     "unit_of_measurement": "gal",
+                    "unit_class": "volume",
                 }
                 sorted_r = sorted(reclaimed, key=lambda x: x["d"])
                 stats = []
