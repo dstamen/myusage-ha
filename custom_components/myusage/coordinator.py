@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 import http.cookiejar
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 
 from homeassistant.core import HomeAssistant
@@ -17,6 +17,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from .const import DOMAIN, BASE_URL, LOGIN_URL, DATA_URL
 
 _LOGGER = logging.getLogger(__name__)
+_UTC = timezone.utc
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -388,10 +389,96 @@ class MyUsageCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         try:
-            return await self.hass.async_add_executor_job(
+            data = await self.hass.async_add_executor_job(
                 _fetch_myusage_data, self._email, self._password
             )
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
             raise UpdateFailed(f"Error fetching MyUsage data: {exc}") from exc
+
+        await self._async_inject_statistics(data)
+        return data
+
+    async def _async_inject_statistics(self, data: dict) -> None:
+        """Inject OUC hourly stats so they're available for dashboard cards."""
+        try:
+            from homeassistant.components.recorder.statistics import async_import_statistics
+            from homeassistant.components.recorder.models import (
+                StatisticData,
+                StatisticMetaData,
+                StatisticMeanType,
+            )
+        except ImportError:
+            _LOGGER.warning("MyUsage: recorder statistics API not available")
+            return
+
+        def _hourly_dt(date: str, hour: int) -> datetime:
+            p = date.split("/")
+            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=_UTC)
+
+        def _daily_dt(date_str: str) -> datetime:
+            p = date_str.split("/")
+            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=_UTC)
+
+        datasets = [
+            ("myusage:electric_kwh", "Electric", "kWh",
+             data["electric"].get("hourly", []), data["electric"].get("reading", 0), True),
+            ("myusage:water_gal", "Water", "gal",
+             data["water"].get("hourly", []), data["water"].get("reading", 0), True),
+        ]
+
+        for statistic_id, name, unit, hourly, meter_reading, is_hourly in datasets:
+            if not hourly:
+                continue
+            try:
+                metadata: StatisticMetaData = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": name,
+                    "source": DOMAIN,
+                    "statistic_id": statistic_id,
+                    "unit_of_measurement": unit,
+                }
+                sorted_h = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
+                total_h = sum(float(h.get("kwh", 0)) for h in sorted_h)
+                base = float(meter_reading) - total_h if meter_reading else 0.0
+                stats = []
+                running = base
+                for h in sorted_h:
+                    val = float(h.get("kwh", 0))
+                    running += val
+                    stats.append(StatisticData(
+                        start=_hourly_dt(h["date"], h["hour"]),
+                        mean=val, min=val, max=val, state=val, sum=running,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
+                _LOGGER.debug("MyUsage: injected %d hourly stats for %s", len(stats), statistic_id)
+            except Exception:
+                _LOGGER.exception("MyUsage: failed to inject stats for %s", statistic_id)
+
+        # Reclaimed — daily only (no hourly data from portal)
+        reclaimed = data["reclaimed"]["history"]
+        if reclaimed:
+            try:
+                metadata = {
+                    "mean_type": StatisticMeanType.ARITHMETIC,
+                    "has_sum": True,
+                    "name": "Reclaimed Water",
+                    "source": DOMAIN,
+                    "statistic_id": "myusage:reclaimed_gal",
+                    "unit_of_measurement": "gal",
+                }
+                sorted_r = sorted(reclaimed, key=lambda x: x["d"])
+                stats = []
+                running = 0.0
+                for h in sorted_r:
+                    val = float(h.get("gal", 0))
+                    running += val
+                    stats.append(StatisticData(
+                        start=_daily_dt(h["d"]),
+                        mean=val, min=val, max=val, state=val, sum=running,
+                    ))
+                async_import_statistics(self.hass, metadata, stats)
+            except Exception:
+                _LOGGER.exception("MyUsage: failed to inject stats for myusage:reclaimed_gal")
