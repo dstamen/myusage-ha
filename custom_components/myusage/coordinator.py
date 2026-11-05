@@ -7,17 +7,17 @@ import urllib.parse
 import urllib.request
 import http.cookiejar
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, BASE_URL, LOGIN_URL, DATA_URL
 
 _LOGGER = logging.getLogger(__name__)
-_UTC = timezone.utc
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -121,7 +121,7 @@ def _parse_hourly_table(html: str) -> list[dict]:
     if len(rows) < 5:
         return []
 
-    today = datetime.now()
+    today = dt_util.now()
 
     def infer_year(md: str) -> str:
         parts = md.split("/")
@@ -221,7 +221,7 @@ def _post(opener, url: str, data_dict: dict, extra_headers: dict | None = None) 
 
 def _fetch_myusage_data(email: str, password: str) -> dict:
     """Fetch 30-day usage history from MyUsage (blocking — run in executor)."""
-    today = datetime.now()
+    today = dt_util.now()
     from_date = (today - timedelta(days=30)).strftime("%m/%d/%Y")
     to_date   = (today + timedelta(days=1)).strftime("%m/%d/%Y")
 
@@ -418,13 +418,29 @@ class MyUsageCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("MyUsage: recorder statistics API not available")
             return
 
-        def _hourly_dt(date: str, hour: int) -> datetime:
-            p = date.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), hour, 0, 0, tzinfo=_UTC)
+        # The portal labels hours and days in the utility's local time, which
+        # is assumed to match the Home Assistant time zone. Statistics need UTC.
+        tz = dt_util.get_default_time_zone()
 
-        def _daily_dt(date_str: str) -> datetime:
-            p = date_str.split("/")
-            return datetime(int(p[2]), int(p[0]), int(p[1]), 0, 0, 0, tzinfo=_UTC)
+        def _local_dt(date: str, hour: int = 0) -> datetime:
+            p = date.split("/")
+            local = datetime(int(p[2]), int(p[0]), int(p[1]), hour, tzinfo=tz)
+            return dt_util.as_utc(local)
+
+        def _build_stats(points: list[tuple[datetime, float]], base: float) -> list:
+            # Merge points that land on the same UTC hour (DST changeover)
+            merged: dict[datetime, float] = {}
+            for start, val in points:
+                merged[start] = merged.get(start, 0.0) + val
+            stats = []
+            running = base
+            for start in sorted(merged):
+                val = merged[start]
+                running += val
+                stats.append(StatisticData(
+                    start=start, mean=val, min=val, max=val, state=running, sum=running,
+                ))
+            return stats
 
         datasets = [
             ("myusage:electric_kwh", "MyUsage Electric", "kWh", "energy",
@@ -446,18 +462,13 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     "unit_of_measurement": unit,
                     "unit_class": unit_class,
                 }
-                sorted_h = sorted(hourly, key=lambda x: (x["date"], x["hour"]))
-                total_h = sum(float(h.get("kwh", 0)) for h in sorted_h)
+                points = [
+                    (_local_dt(h["date"], h["hour"]), float(h.get("kwh", 0)))
+                    for h in hourly
+                ]
+                total_h = sum(val for _, val in points)
                 base = float(meter_reading) - total_h if meter_reading else 0.0
-                stats = []
-                running = base
-                for h in sorted_h:
-                    val = float(h.get("kwh", 0))
-                    running += val
-                    stats.append(StatisticData(
-                        start=_hourly_dt(h["date"], h["hour"]),
-                        mean=val, min=val, max=val, state=running, sum=running,
-                    ))
+                stats = _build_stats(points, base)
                 async_add_external_statistics(self.hass, metadata, stats)
                 _LOGGER.debug("MyUsage: injected %d hourly stats for %s", len(stats), statistic_id)
             except Exception:
@@ -476,16 +487,8 @@ class MyUsageCoordinator(DataUpdateCoordinator):
                     "unit_of_measurement": "gal",
                     "unit_class": "volume",
                 }
-                sorted_r = sorted(reclaimed, key=lambda x: x["d"])
-                stats = []
-                running = 0.0
-                for h in sorted_r:
-                    val = float(h.get("gal", 0))
-                    running += val
-                    stats.append(StatisticData(
-                        start=_daily_dt(h["d"]),
-                        mean=val, min=val, max=val, state=running, sum=running,
-                    ))
+                points = [(_local_dt(h["d"]), float(h.get("gal", 0))) for h in reclaimed]
+                stats = _build_stats(points, 0.0)
                 async_add_external_statistics(self.hass, metadata, stats)
             except Exception:
                 _LOGGER.exception("MyUsage: failed to inject stats for myusage:reclaimed_gal")

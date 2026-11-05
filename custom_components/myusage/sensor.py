@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -20,19 +19,6 @@ from .const import DOMAIN
 from .coordinator import MyUsageCoordinator
 
 UNIT_GAL = "gal"
-
-
-def _parse_posted(posted: str):
-    """Parse posted date string (MM/DD/YYYY HH:MM AM/PM) to UTC datetime."""
-    if not posted:
-        return None
-    try:
-        return datetime.strptime(posted, "%m/%d/%Y %I:%M %p").replace(tzinfo=timezone.utc)
-    except ValueError:
-        try:
-            return datetime.strptime(posted.split(" ")[0], "%m/%d/%Y").replace(tzinfo=timezone.utc)
-        except ValueError:
-            return None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -94,6 +80,33 @@ SENSORS: tuple[MyUsageSensorDescription, ...] = (
             "reading": d["reclaimed"]["reading"],
             "meter":   d["meters"]["reclaimed"],
         },
+    ),
+    MyUsageSensorDescription(
+        key="electric_mtd_kwh",
+        name="Electric Month to Date",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        icon="mdi:calendar-month",
+        value_fn=lambda d: d["electric"]["mtd_kwh"],
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="water_mtd_gal",
+        name="Water Month to Date",
+        native_unit_of_measurement=UnitOfVolume.GALLONS,
+        device_class=SensorDeviceClass.WATER,
+        icon="mdi:calendar-month",
+        value_fn=lambda d: d["water"]["mtd_gal"],
+        attr_fn=None,
+    ),
+    MyUsageSensorDescription(
+        key="reclaimed_mtd_gal",
+        name="Reclaimed Water Month to Date",
+        native_unit_of_measurement=UnitOfVolume.GALLONS,
+        device_class=SensorDeviceClass.WATER,
+        icon="mdi:calendar-month",
+        value_fn=lambda d: d["reclaimed"]["mtd_gal"],
+        attr_fn=None,
     ),
     MyUsageSensorDescription(
         key="electric_reading",

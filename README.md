@@ -3,147 +3,109 @@
 [![Version](https://img.shields.io/github/v/release/dstamen/myusage-ha?label=version)](https://github.com/dstamen/myusage-ha/releases/latest)
 [![Validate with hassfest and HACS](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/dstamen/myusage-ha/actions/workflows/validate.yml)
 
-Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) directly into Home Assistant as sensors with built-in statistics, month-to-date totals, and 30-day charts.
+Pull electric, water, and reclaimed water usage from your utility's MyUsage portal (Exceleron-powered) into Home Assistant as sensors, month-to-date totals, and hourly long-term statistics.
 
-Works with any utility using Exceleron's MyUsage platform — Orlando Utilities Commission (OUC), Tampa Electric, and many others.
-
-> **Proper HACS integration** — Install one click, enter credentials in UI, no SSH or manual setup required.
+Works with utilities on Exceleron's MyUsage platform, such as Orlando Utilities Commission (OUC).
 
 ---
 
 ## Features
 
-✅ **10 sensors** — electric (kWh + kW demand + meter reading), water (usage + meter reading), reclaimed water (usage + meter reading), and last posted timestamps for each
-✅ **Hourly updates** — checks for new readings every hour
-✅ **Hourly statistics** — auto-injected into HA's SQLite database, 7 days × 24 hours of real per-hour readings
-✅ **7-day hourly charts** — statistics-graph cards show real per-hour usage, not daily spikes
-✅ **Zero config** — auto-detects your meters, works for any supported utility
-✅ **stdlib only** — no `pip install` required, works on HAOS
+- **13 sensors**: electric (daily kWh, peak kW demand, meter reading, month to date), water (daily usage, meter reading, month to date), reclaimed water (daily usage, meter reading, month to date), and the last posted time for each service
+- **Hourly updates**: checks the portal for new readings every hour
+- **Hourly statistics**: imports the portal's per-hour electric and water readings (the last 7 days) as external statistics, usable in statistics-graph cards and the Energy dashboard
+- **Auto-detected meters**: no meter numbers to enter
+- **No extra dependencies**: Python standard library only
 
 ---
 
-## Installation via HACS
+## Installation
 
-1. Go to **Settings → Devices & Services → Integrations**
-2. Click **+ Create Automation** → search for **MyUsage**
-3. Click **Install**
-4. Restart Home Assistant
-5. Go to **Integrations**, search **MyUsage**, click **Create Entry**
-6. Enter your utility email and password
-7. Sensors appear in 1–2 minutes
+### HACS
+
+1. In Home Assistant, open **HACS** and search for **MyUsage**.
+   If it does not show up, open the ⋮ menu → **Custom repositories**, add `https://github.com/dstamen/myusage-ha` with type **Integration**, then search again.
+2. Open **MyUsage** and select **Download**.
+3. Restart Home Assistant.
+4. Go to **Settings → Devices & services**, select **+ Add integration**, and search for **MyUsage**.
+5. Enter the email and password you use on your utility's MyUsage portal.
+
+### Manual
+
+Copy `custom_components/myusage` into your Home Assistant `config/custom_components/` folder, restart Home Assistant, then follow step 4 above.
 
 ---
 
-## Sensors Created
+## Sensors
 
 | Sensor | Value | Unit |
 |--------|-------|------|
-| `sensor.myusage_electric` | Last daily kWh | kWh |
-| `sensor.myusage_electric_peak_demand` | Peak kW | kW |
-| `sensor.myusage_electric_reading` | Cumulative meter reading | kWh |
-| `sensor.myusage_water` | Last daily water usage | gal |
-| `sensor.myusage_water_reading` | Cumulative meter reading | gal |
-| `sensor.myusage_reclaimed_water` | Last daily reclaimed usage | gal |
-| `sensor.myusage_reclaimed_reading` | Cumulative meter reading | gal |
-| `sensor.myusage_electric_last_posted` | When electric reading was posted | text |
-| `sensor.myusage_water_last_posted` | When water reading was posted | text |
-| `sensor.myusage_reclaimed_water_last_posted` | When reclaimed reading was posted | text |
+| `sensor.myusage_electric` | Latest daily usage | kWh |
+| `sensor.myusage_electric_peak_demand` | Latest peak demand | kW |
+| `sensor.myusage_electric_meter_reading` | Cumulative meter reading | kWh |
+| `sensor.myusage_electric_month_to_date` | Usage posted so far this month | kWh |
+| `sensor.myusage_water` | Latest daily usage | gal |
+| `sensor.myusage_water_meter_reading` | Cumulative meter reading | gal |
+| `sensor.myusage_water_month_to_date` | Usage posted so far this month | gal |
+| `sensor.myusage_reclaimed_water` | Latest daily usage | gal |
+| `sensor.myusage_reclaimed_water_meter_reading` | Cumulative meter reading | gal |
+| `sensor.myusage_reclaimed_water_month_to_date` | Usage posted so far this month | gal |
+| `sensor.myusage_electric_last_posted` | When the latest electric reading was posted | text |
+| `sensor.myusage_water_last_posted` | When the latest water reading was posted | text |
+| `sensor.myusage_reclaimed_water_last_posted` | When the latest reclaimed reading was posted | text |
 
-The `*_reading` sensors use `state_class: total_increasing` — they report your actual cumulative meter value and work natively with HA's **Energy dashboard** (Settings → Energy → Add electricity/water grid source).
+The `*_meter_reading` sensors use `state_class: total_increasing`, so they work with the **Energy dashboard** (Settings → Dashboards → Energy).
 
-All sensors include meter numbers, reading types, and posted timestamps in their attributes. The `history` attribute contains the last 30 days of readings (used for month-to-date calculations).
+The daily usage sensors carry the meter number, reading type, posted time and meter reading as attributes. Month-to-date totals add up the daily readings posted in the current calendar month.
 
-### Optional: Month-to-Date Totals**
+### Statistics
 
-Add template sensors to calculate MTD totals from history:
+The integration also writes external statistics that hold the portal's hourly readings:
 
-```yaml
-template:
-  - sensor:
-      - name: "Electric MTD"
-        unique_id: myusage_electric_mtd
-        unit_of_measurement: "kWh"
-        state: >
-          {% set hist = state_attr('sensor.myusage_electric', 'electric')['history'] %}
-          {% set m = now().month %}{% set y = now().year %}
-          {% set ns = namespace(t=0) %}
-          {% for h in hist %}{% set p = h.d.split('/') %}
-            {% if p[0]|int == m and p[2]|int == y %}{% set ns.t = ns.t + h.kwh %}{% endif %}
-          {% endfor %}{{ ns.t }}
-```
+| Statistic ID | Resolution |
+|--------------|-----------|
+| `myusage:electric_kwh` | Hourly |
+| `myusage:water_gal` | Hourly |
+| `myusage:reclaimed_gal` | Daily (the portal has no hourly reclaimed data) |
+
+The portal labels hours in the utility's local time. The integration reads them in your Home Assistant time zone, so set that to the utility's time zone (Settings → System → General).
 
 ---
 
-## Dashboard Example
+## Dashboard example
 
 ```yaml
-type: sections
-title: Utilities
-cards:
-  - type: statistics-graph
-    title: "⚡ Electric (30 days)"
-    entities:
-      - sensor.myusage_electric
-    period: day
-    stat_types:
-      - mean
-  - type: statistics-graph
-    title: "💧 Water (30 days)"
-    entities:
-      - sensor.myusage_water
-      - sensor.myusage_reclaimed_water
-    period: day
-    stat_types:
-      - mean
+type: statistics-graph
+title: Electric (last 7 days)
+entities:
+  - myusage:electric_kwh
+period: hour
+days_to_show: 7
+stat_types:
+  - change
+chart_type: bar
 ```
-
----
-
-## How It Works
-
-1. **Hourly fetch** — coordinator logs into your utility's MyUsage portal via HTTPS
-2. **Parse history** — extracts last 30 days of electric & water readings from portal
-3. **Create sensors** — displays latest reading + peak demand + MTD totals
-4. **Daily backfill** — automatically injects daily readings into HA's statistics database
-5. **Chart display** — statistics-graph cards show exact daily values, not averages
-
-The key difference from command-line approach:
-
-- ✅ Stored in HA's native integration registry
-- ✅ Automatic stats injection (no manual backfill)
-- ✅ Credentials encrypted in config entry (not exposed in YAML)
-- ✅ One-click HACS install
-- ✅ Proper error handling and retry logic
 
 ---
 
 ## Notes
 
-- Your utility posts readings ~9–10 AM; sensors update hourly but values only change when readings are posted
-- Uses Python stdlib only — works on any HAOS installation
-- Stats are external (not entity recorder) — stored with statistic_id `myusage:electric_kwh` etc.
-- Safe to run multiple times; statistics only update if values changed
-- Works for any utility using Exceleron's MyUsage platform
+- Utilities usually post readings around 9–10 AM. Sensors poll hourly, but values only change once a new reading is posted.
+- Your MyUsage email and password are stored in the Home Assistant config entry. Like other integrations' credentials, they are kept as plain text in `config/.storage`, so protect that folder and your backups.
+- Re-importing statistics is safe: each run overwrites the same hours.
 
 ---
 
 ## Troubleshooting
 
-**Sensors showing "unavailable":**
+**Sensors show "unavailable":**
 
-- Integration may still be fetching on first run (1–2 min)
-- Check Settings → Devices & Services → Integrations for "MyUsage" errors
-- Verify email/password are correct
-
-**Charts show old data:**
-
-- Statistics populate hourly after first fetch; wait 1–2 hours for backfill
-- Restart HA if charts still blank after waiting
+- The first fetch can take a minute or two.
+- Check **Settings → Devices & services → MyUsage** for errors.
 
 **Login errors:**
 
-- Double-check your utility email and password (case-sensitive)
-- If you changed your password, re-enter it in the integration settings
+- If your password changed, Home Assistant shows a **Re-authenticate** prompt for MyUsage under **Settings → Devices & services**. Enter the new password there.
 
 ---
 
